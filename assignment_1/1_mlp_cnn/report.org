@@ -1,0 +1,141 @@
+#+BIND: org-export-use-babel nil
+#+TITLE: DLC assignment 1: MLPs, CNNs & backpropagation
+#+AUTHOR: jeroen jagt
+#+EMAIL: <jpjagt@pm.me>
+#+DATE: October 29, 2020
+#+LATEX: \setlength\parindent{0pt}
+#+LaTeX_HEADER: \usepackage{minted}
+#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
+#+LATEX_HEADER_EXTRA:  \usepackage{mdframed}
+#+LATEX_HEADER_EXTRA: \BeforeBeginEnvironment{minted}{\begin{mdframed}}
+#+LATEX_HEADER_EXTRA: \AfterEndEnvironment{minted}{\end{mdframed}}
+#+MACRO: NEWLINE @@latex:\\@@ @@html:<br>@@
+#+PROPERTY: header-args :exports both :session report :cache :results value
+#+OPTIONS: ^:nil
+#+LATEX_COMPILER: pdflatex
+
+
+
+#+BEGIN_EXPORT latex
+\newcommand{\bt}[1]{\mathbf{#1}}
+\newcommand{\dr}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\ykl}{\sum_m^M (X_{km} W_{lm}) + b_l}
+\newcommand{\drs}[1]{\sum_{k,l}^{S,N} \dr{L}{Y_{kl}} \dr{Y_{kl}}{#1}}
+#+END_EXPORT
+* MLP backprop
+
+** gradients
+
+*** a
+
+We can write
+
+$$ Y_{kl} = \sum_m^M (X_{km} W_{lm}) + B_{kl} = \sum_m^M (X_{km} W_{lm}) + b_l
+$$
+
+#+BEGIN_EXPORT latex
+Derivatives towards $\bf{W}$:
+
+\begin{equation}
+\dr{Y_{kl}}{W_{ij}} = \dr{}{W_{ij}} (\ykl) = \begin{cases} X_{kj} &\text{if
+}i=l \\ 0 &\text{otherwise} \end{cases}
+\end{equation}
+
+Then,
+
+$$\dr{L}{W_{ij}} = \drs{W_{ij}} = \sum_k^S \dr{L}{Y_{ki}} X_{kj} = (\dr{L}{\bt Y_{:i}})^T \bt X_{:j}$$ (where $:$ index denotes that entire axis).
+
+Looking at the dimensions, we then see that
+
+$$\dr{L}{{\bf W}} = (\dr{L}{\bt Y})^T \bt X$$
+
+Derivatives towards $\bf{b}$:
+
+$$\dr{Y_{kl}}{b_i} = \dr{}{b_i} (\ykl) = \begin{cases} 1 &\text{if }i = l \\ 0 &\text{otherwise} \end{cases}$$
+
+Then,
+
+$$\dr{L}{b_i} = \drs{b_i} = \sum_k^S \dr{L}{Y_{ki}} 1 = (\dr{L}{\bt Y_{:i}})^T \bt 1_S$$
+
+where $\bt 1_S$ denotes a vector of ones of length $S$.
+
+Finally:
+
+$$\dr{L}{\bt b} = (\dr{L}{\bt Y})^T \bt 1_S$$
+
+Derivatives towards $\bt X$:
+
+$$\dr{Y_{kl}}{X_{ij}} = \dr{}{X_{ij}} (\ykl) = \begin{cases} W_{lj} &\text{if
+  }k=i \\ 0 &\text{otherwise} \end{cases}$$
+
+Then,
+
+$$\dr{L}{X_{ij}} = \drs{X_{ij}} = \sum_l^N (\dr{L}{Y_{il}} W_{lj}) = \dr{L}{\bt Y_{i:}} \bt W_{:j}$$
+
+And thus,
+
+$$\dr{L}{\bt X} = \dr{L}{\bt Y} \bt W$$
+#+END_EXPORT
+
+*** b
+
+#+BEGIN_EXPORT latex
+For any such function $h$:
+
+$$\dr{Y_{kl}}{X_{ij}} = \dr{}{X_{ij}} h(X_{kl}) =
+\begin{cases}\dr{h}{X_{ij}} &\text{if }i=k \land j=l \\ 0 &\text{otherwise}\end{cases}$$
+
+$$\dr{L}{X_{ij}} = \drs{X_{ij}} = \dr{L}{Y_{ij}} \dr{h}{X_{ij}}$$
+
+The derivative of the ELU is:
+
+$$\dr{h}{x} = \begin{cases} 1 &\text{if }x \geq 0 \\ e^x &\text{otherwise} \end{cases}$$
+$$= \exp (x \times \mathbbm{1}[x < 0])$$
+
+For the entire data batch, we can thus write:
+
+$$\dr{L}{X_{ij}} = \drs{X_{ij}} = \dr{L}{Y_{ij}} \circ \bt{\text{exp}} (\bt X \circ \bt \mathbbm{1}[\bt X < 0])$$
+
+where $\bt{\text{exp}}$ is the exponential function applied element-wise, and $\bt \mathbbm{1}[\cdot]$ is the indicator function applied element-wise on a (boolean) matrix.
+#+END_EXPORT
+
+*** c
+
+#+BEGIN_EXPORT latex
+I. Softmax derivative
+
+\newcommand{\sm}{[\text{softmax}(\bt X)]}
+\newcommand{\smsum}{\sum^C_c \exp(X_{kc})}
+
+$$Y_{kl} = \sm_{kl} = \frac{\exp(X_{kl})}{\sum^C_c \exp(X_{kc})}$$
+
+$$\dr{Y_{kl}}{X_{ij}} = \dr{}{X_{ij}} \sm_{kl}$$
+
+This derivative is:
+
+\begin{aligned}[]
+[ \text{if } i \neq k ] &= 0 \\
+[\text{else if }l \neq j] &= \exp(X_{il}) \frac{1}{(\smsum)^2} (- \exp(X_{ij}) = \sm_{il} (- \sm_{ij}) \\
+[\text{else }] &= \frac{\exp(X_{ij}) \smsum - \exp(X_{ij})\exp(X_{ij})}{(\smsum)^2} \\
+&= \frac{\exp(X_{ij})}{\smsum} (\frac{\smsum}{\smsum} - \frac{\exp(X_{ij})}{\smsum}) = \sm_{ij} (1 - \sm_{ij})
+\end{aligned}
+
+which can be written as:
+
+$$\begin{cases} 0 &\text{if } i \neq k \\ \sm_{il} (\delta_{lj} - \sm_{ij}) &\text{otherwise} \end{cases}$$
+
+where $\delta_{lj}$ is the Kronecker delta, which equals 1 when $l = j$, and 0 otherwise.
+
+Plugging that in, we end up with:
+
+$$\dr{L}{X_{ij}} = \sum_{k,l} \dr{L}{Y_{kl}} \dr{Y_{kl}}{X_{ij}} = \sum_{l} \dr{L}{Y_{il}} \dr{Y_{il}}{X_{ij}} = \sum_{l} \dr{L}{Y_{il}} \sm_{il} (\delta_{lj} - \sm_{ij})$$
+
+II. Loss derivative
+
+$$\dr{L}{X_{ij}} = - \frac{1}{S} \dr{}{X_{ij}} \sum_{k,c}^{S,C} T_{kc} \log(X_{kc}) = - \frac{1}{S} T_{ij} \frac{1}{X_{ij}} 1 = - \frac{1}{S} \frac{T_{ij}}{X_{ij}}$$
+
+So
+
+$$\dr{L}{\bt X} = - \frac{1}{S} \bt T \circ \bt X^{-1}$$
+
+#+END_EXPORT
