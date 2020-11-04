@@ -29,6 +29,11 @@ NEG_SLOPE_DEFAULT = 0.02
 
 # my defaults :D
 OPTIMIZER_DEFAULT = "Adam"
+OPTIMIZER_MOMENTUM_DEFAULT = 0.9
+ACTIVATION_FN_DEFAULT = "ELU"
+SCHEDULER_DEFAULT = "StepLR"
+SCHEDULER_STEP_SIZE_DEFAULT = MAX_STEPS_DEFAULT // 3
+SCHEDULER_GAMMA_DEFAULT = 0.5
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = "./cifar10/cifar-10-batches-py"
@@ -36,6 +41,18 @@ DATA_DIR_DEFAULT = "./cifar10/cifar-10-batches-py"
 FLAGS = None
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def get_scheduler(name, optimizer):
+    print("gam", FLAGS.scheduler_gamma)
+    scheduler = None
+    if name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=FLAGS.scheduler_step_size,
+            gamma=FLAGS.scheduler_gamma,
+        )
+    return scheduler
 
 
 def get_optimizer(name, params):
@@ -47,7 +64,11 @@ def get_optimizer(name, params):
     if name not in optimizers:
         raise f"{name} is not a valid choice of optimizer. Valid choices are {', '.join(list(optimizers.keys()))}"
 
-    optimizer = optimizers[name](params, lr=FLAGS.learning_rate)
+    flags = {}
+    if name == "SGD":
+        flags["momentum"] = FLAGS.optimizer_momentum
+    print("flags optim", flags)
+    optimizer = optimizers[name](params, lr=FLAGS.learning_rate, **flags)
     return optimizer
 
 
@@ -96,6 +117,10 @@ def train():
     np.random.seed(42)
     torch.manual_seed(42)
 
+    ts = str(int(time.time()))
+    print("timestamp:", ts)
+    print("device:", DEVICE)
+
     ## Prepare all functions
     # Get number of units in each hidden layer specified in the string such as 100,100
     if FLAGS.dnn_hidden_units:
@@ -114,8 +139,13 @@ def train():
     n_inputs = imsize[0] * imsize[1] * imsize[2]
     n_classes = data["train"].labels[0].shape[0]
 
-    mlp = MLP(n_inputs, dnn_hidden_units, n_classes)
-    optimizer = get_optimizer(FLAGS.optimizer, mlp.parameters())
+    model = MLP(n_inputs, dnn_hidden_units, n_classes, FLAGS.activation_fn)
+    model.to(DEVICE)
+    print("model:")
+    print(model)
+
+    optimizer = get_optimizer(FLAGS.optimizer, model.parameters())
+    scheduler = get_scheduler(FLAGS.scheduler, optimizer)
     loss_fn = F.cross_entropy
     i = 0
 
@@ -123,49 +153,57 @@ def train():
     accs = defaultdict(list)
     i_at_evals = []
     while True:
+        model.train()
         optimizer.zero_grad()
         X_train, y_train = data["train"].next_batch(FLAGS.batch_size)
         X_train = torch.from_numpy(X_train).to(DEVICE)
         y_train = torch.from_numpy(y_train).to(DEVICE)
 
-        pred_train = mlp(X_train)
+        pred_train = model(X_train)
         loss = loss_fn(pred_train, onehot2indices(y_train))
         loss.backward()
 
         optimizer.step()
+        if scheduler:
+            scheduler.step()
+            if i % FLAGS.scheduler_step_size == 0 and i > 0:
+                print("[scheduler] updating LR")
 
         epoch = data["train"].epochs_completed
         if i % FLAGS.eval_freq == 0:
-            i_at_evals.append(i)
-            X_test, y_test = data["test"].images, data["test"].labels
-            X_test = torch.from_numpy(X_test).to(DEVICE)
-            y_test = torch.from_numpy(y_test).to(DEVICE)
-            pred_test = mlp(X_test)
+            with torch.no_grad():
+                model.eval()
+                i_at_evals.append(i)
+                X_test, y_test = data["test"].images, data["test"].labels
+                X_test = torch.from_numpy(X_test).to(DEVICE)
+                y_test = torch.from_numpy(y_test).to(DEVICE)
+                pred_test = model(X_test)
 
-            train_loss = loss.item()
-            test_loss = loss_fn(pred_test, onehot2indices(y_test)).item()
-            losses["train"].append(train_loss)
-            losses["test"].append(test_loss)
+                train_loss = loss.item()
+                test_loss = loss_fn(pred_test, onehot2indices(y_test)).item()
+                losses["train"].append(train_loss)
+                losses["test"].append(test_loss)
 
-            train_acc = accuracy(pred_train, y_train) * 100
-            test_acc = accuracy(pred_test, y_test) * 100
-            accs["train"].append(train_acc)
-            accs["test"].append(test_acc)
-            print(
-                "[epoch %s: %s/%s] train_acc: %0.3f, test_acc: %0.3f"
-                % (
-                    epoch,
-                    i * FLAGS.batch_size % data["train"].num_examples,
-                    data["train"].num_examples,
-                    train_acc,
-                    test_acc,
+                train_acc = accuracy(pred_train, y_train) * 100
+                test_acc = accuracy(pred_test, y_test) * 100
+                accs["train"].append(train_acc)
+                accs["test"].append(test_acc)
+                print(
+                    "[epoch %s: %s/%s] train_acc: %0.3f, test_acc: %0.3f"
+                    % (
+                        epoch,
+                        i * FLAGS.batch_size % data["train"].num_examples,
+                        data["train"].num_examples,
+                        train_acc,
+                        test_acc,
+                    )
                 )
-            )
 
         i += 1
         if i >= FLAGS.max_steps:
             break
 
+    print("highest test accuracy:", np.max(accs["test"]))
     fig, ax = plt.subplots(figsize=(13, 7))
     ax.plot(i_at_evals, losses["train"], label="train loss", color="purple")
     ax.plot(i_at_evals, losses["test"], label="test loss", color="green")
@@ -181,7 +219,7 @@ def train():
     plt.legend(loc="upper right")
     plt.title("loss and accuracy (dashed) when training PyTorch MLP")
     plt.savefig(
-        f"{int(time.time())}_train_mlp_pytorch_results.png",
+        f"{ts}_mlp_pytorch_results.png",
         bbox_inches="tight",
     )
 
@@ -254,6 +292,36 @@ if __name__ == "__main__":
         type=str,
         default=OPTIMIZER_DEFAULT,
         help="Name of optimizer to use",
+    )
+    parser.add_argument(
+        "--optimizer_momentum",
+        type=float,
+        default=OPTIMIZER_MOMENTUM_DEFAULT,
+        help="momentum of optimizer",
+    )
+    parser.add_argument(
+        "--activation_fn",
+        type=str,
+        default=ACTIVATION_FN_DEFAULT,
+        help="The name of the activation function",
+    )
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default=SCHEDULER_DEFAULT,
+        help="The name of the scheduler",
+    )
+    parser.add_argument(
+        "--scheduler_gamma",
+        type=float,
+        default=SCHEDULER_GAMMA_DEFAULT,
+        help="The value of the scheduler gamma parameter ",
+    )
+    parser.add_argument(
+        "--scheduler_step_size",
+        type=int,
+        default=SCHEDULER_STEP_SIZE_DEFAULT,
+        help="The step size of the scheduler",
     )
 
     FLAGS, unparsed = parser.parse_known_args()

@@ -8,6 +8,12 @@ from __future__ import print_function
 
 import torch.nn as nn
 
+activation_fns = {
+    "ELU": nn.ELU,
+    "RELU": nn.ReLU,
+    "Hardshrink": nn.Hardshrink,
+}
+
 
 class MLP(nn.Module):
     """
@@ -16,7 +22,7 @@ class MLP(nn.Module):
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_inputs, n_hidden, n_classes):
+    def __init__(self, n_inputs, n_hidden, n_classes, activation_fn="ELU"):
         """
         Initializes MLP object.
 
@@ -36,13 +42,19 @@ class MLP(nn.Module):
 
         super(MLP, self).__init__()
 
+        if activation_fn not in activation_fns:
+            raise "Invalid activation_fn"
+
         modules = []
         n_overall = [n_inputs] + n_hidden + [n_classes]
+        # modules.append(nn.BatchNorm1d(n_inputs))
+
         for i in range(len(n_overall) - 1):
             modules.append(nn.Linear(n_overall[i], n_overall[i + 1]))
             if i < (len(n_overall) - 2):
-                modules.append(nn.ELU())
-        modules.append(nn.Softmax())
+                modules.append(nn.BatchNorm1d(n_overall[i + 1]))
+                modules.append(activation_fns[activation_fn]())
+        modules.append(nn.Softmax(dim=1))
 
         self.nn = nn.Sequential(*modules)
 
