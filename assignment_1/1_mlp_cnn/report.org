@@ -22,6 +22,7 @@
 \newcommand{\ykl}{\sum_m^M (X_{km} W_{lm}) + b_l}
 \newcommand{\drs}[1]{\sum_{k,l}^{S,N} \dr{L}{Y_{kl}} \dr{Y_{kl}}{#1}}
 #+END_EXPORT
+
 * MLP backprop
 
 ** gradients
@@ -139,3 +140,135 @@ So
 $$\dr{L}{\bt X} = - \frac{1}{S} \bt T \circ \bt X^{-1}$$
 
 #+END_EXPORT
+
+** numpy MLP
+
+The loss and accuracy scores for the training and test sets during training
+using the default parameters provided in the training script
+=train_mlp_numpy.py= are displayed in Figure [[fig:numpy_results]].
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Loss and accuracy during training of the numpy MLP. The accuracy is graphed using a dashed line.
+#+label: fig:numpy_results
+[[file:code/train_mlp_numpy_results.png]]
+
+* PyTorch MLP
+
+** Implementation
+
+For the initial implementation, I used the =Adam= optimizer that is provided by PyTorch.
+
+After writing the initial implementation, I have implemented the following
+adaptations to the PyTorch MLP, with the goal of attaining increased test
+accuracy.
+- *Change of optimizer*: realizing that my network had quite a lot of
+  parameters, I switched from =Adam= to =SGD=, because to my knowledge, =Adam=
+  works best on small networks. I added a flag for the momentum parameter which
+  I set to =0.9= by default, which is the value I kept using. This switch
+  caused my network to jump from around 25% to 35% test accuracy.
+- *Increase in batch size*: from what I heard, it is generally desirable to
+  have a large batch size because this will stabilize the descent, and that the
+  batch size parameter is mainly determined by computational resources. I
+  increased the batch size from 200 to 600, but this did not seem to yield a
+  significant improvement in test accuracy. Nevertheless, I continued using a
+  batch size of 600.
+- *Increase in layers*: in order to investigate whether a deeper network would
+  yield improved performance, I increased the =dnn_hidden_units= from just a
+  single layer of width 100 to the following sequence: =100, 30, 20, 20, 20=. I
+  chose for a slim but deep architecture because I've learnt that depth is more
+  important than width. I also increased the =max_steps= from 1400 to 6000 to
+  accomodate for the larger architecture (which I guessed required more
+  iterations to train). All in all, this did lead to an increased test accuracy, which jumped
+  from some 35% to around 41%.
+- *LR Scheduler*: my test accuracy was fluctuating quite erratically at the later
+  stages of training, so I added a learning rate scheduler in order to refine
+  the training at later stages.
+- *Adding BatchNorm layers*: I've seen BatchNorm layers in other DL
+  architectures, and it's said that they generally cause the model to converge
+  quicker. I chose to add them after every non-final linear layer. Doing so
+  caused a substantial jump in performance, namely around 6% increase in test
+  accuracy.
+
+After these changes, I still did not manage to achieve the desired test
+accuracy of =0.52=. I played around with the network, and finally managed to
+achieve a test accuracy of =52.02%= using the following params and model
+architecture:
+
+#+BEGIN_EXPORT latex
+\begin{verbatim}
+dnn_hidden_units : 100,50,20
+learning_rate : 0.029
+max_steps : 5000
+batch_size : 1050
+optimizer : SGD
+optimizer_momentum : 0.9
+activation_fn : ELU
+scheduler : StepLR
+scheduler_gamma : 0.61
+scheduler_step_size : 900
+
+model:
+MLP(
+  (nn): Sequential(
+    (0): Linear(in_features=3072, out_features=100, bias=True)
+    (1): BatchNorm1d(100, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (2): ELU(alpha=1.0)
+    (3): Linear(in_features=100, out_features=50, bias=True)
+    (4): BatchNorm1d(50, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (5): ELU(alpha=1.0)
+    (6): Linear(in_features=50, out_features=20, bias=True)
+    (7): BatchNorm1d(20, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+    (8): ELU(alpha=1.0)
+    (9): Linear(in_features=20, out_features=10, bias=True)
+    (10): Softmax(dim=1)
+  )
+)
+\end{verbatim}
+#+END_EXPORT
+
+I reached these numbers with the intuitions that:
+- A larger batch size generally seemed to improve training
+- Activation functions: ReLU and ELU worked equally well. Other PyTorch
+  functions, such as Hardshrink, yielded a much worse performance.
+- Using a LR scheduler helped to finetune performance at later stages of
+  training. Perhaps it would be better to use the more dynamic
+  =ReduceLROnPlateau=, since I tuned =StepLR= to decrease more or less when the
+  network seemed to flatten out, but I have not experimented with it.
+- Varying the configuration of the hidden units of the MLP yielded very erratic
+  results, and there did not seem to be a particular structure that performed
+  better than others. Therefore, I kept the architecture relatively simple,
+  adding two additional hidden layers on top of the hidden layer in the default
+  parameters.
+- Letting the network train for a higher number of steps did not lead to an
+  increase in performance; most of the times, the optimum was reached
+  relatively early in the training process.
+
+Finally, I played around with the learning rate and scheduler parameters rather
+randomly until this result was achieved (test accuracy of =52.02%= in epoch
+38). The loss and accuracy of this run is displayed in Figure [[fig:pytorch_mlp_results]].
+
+# 1604477470
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Loss and accuracy during training of the PyTorch MLP. The accuracy is graphed using a dashed line.
+#+label: fig:pytorch_mlp_results
+[[file:code/1604477470_train_mlp_pytorch_results.png]]
+# id: 6810249
+
+** Tanh vs ELU
+
+One defining characteristic of the Tanh function is that its range is $(-1, 1)$,
+whereas the range of the ELU function is $(-1, \inf)$. This results in the fact
+that all output values of the hidden layers would be clamped to $(-1,
+1)$. Since these activation layers would only be used as hidden layers (rather
+than their output being the model's output), I don't see how this would be
+problematic.
+
+The output of the Tanh function also means that its derivatives become very
+small beyond the domain of $[-2, 2]$, while the ELU function has stronger
+derivatives (~1) on the larger domain of $[-1, \inf]$. This means that models
+using ELU activation functions tend to converge more quickly than when using
+Tanh activation functions, which is a great benefit of ELU functions.
+
+* My very own Normalization Layer
+
+* PyTorch CNN

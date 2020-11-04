@@ -36,8 +36,10 @@ class CustomLayerNormAutograd(nn.Module):
         """
         super(CustomLayerNormAutograd, self).__init__()
 
-        self.n_neurons = torch.Tensor(n_neurons)
-        self.eps = torch.Tensor(eps)
+        # self.n_neurons = torch.Tensor(n_neurons)
+        # self.eps = torch.Tensor(eps)
+        self.n_neurons = n_neurons
+        self.eps = eps
 
         std = 0.001
         self.gamma = nn.Parameter(
@@ -64,13 +66,13 @@ class CustomLayerNormAutograd(nn.Module):
 
         if len(input.size()) > 2:
             raise ValueError("Input should be two-dimensional")
-        if input.size()[1] != self.n_neurons.item():
+        if input.size()[1] != self.n_neurons:
             raise ValueError(
                 "n_neurons does not match size of second dimension of input"
             )
 
         var, mean = torch.var_mean(input, dim=1, unbiased=False)
-        input_norm = (input - mean) / torch.sqrt(var + self.eps)
+        input_norm = ((input.T - mean) / torch.sqrt(var + self.eps)).T
         out = self.gamma * input_norm + self.beta
         return out
 
@@ -117,16 +119,12 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           For the case that you make use of torch.var be aware that the flag unbiased=False should be set.
         """
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
+        var, mean = torch.var_mean(input, dim=1, unbiased=False)
+        input_norm = ((input.T - mean) / torch.sqrt(var + eps)).T
+        out = gamma * input_norm + beta
 
-        raise NotImplementedError
-
-        ########################
-        # END OF YOUR CODE    #
-        #######################
-
+        ctx.save_for_backward(input, gamma, beta, var, mean, input_norm)
+        ctx.eps = eps
         return out
 
     @staticmethod
@@ -145,18 +143,59 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           Compute gradients for inputs where ctx.needs_input_grad[idx] is True. Set gradients for other
           inputs to None. This should be decided dynamically.
         """
+        grad_beta = grad_gamma = grad_input = None
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
+        input, gamma, beta, var, mean, input_norm = ctx.saved_tensors
+        eps = ctx.eps
+        S, M = grad_output.size()
 
-        raise NotImplementedError
+        if ctx.needs_input_grad[0]:
+            grad_input = torch.zeros(input.size())
+            ve = var + eps
+            ve_sqrt = torch.sqrt(ve)
+            ve_half_inv = ve ** (-1 / 2)
+            for r in range(S):
+                for i in range(M):
+                    grad = torch.Tensor(
+                        [
+                            grad_output[r, l]
+                            * gamma[l]
+                            * (
+                                (int(l == i) - 1 / M) * ve_sqrt[r]
+                                - ve_half_inv[r]
+                                * (1 / M)
+                                * (input[r, i] - mean[r])
+                                * (input[r, l] - mean[r])
+                            )
+                            / ve[r]
+                            for l in range(M)
+                        ]
+                    )
+                    # xxx
+                    onehot = torch.zeros(M)
+                    onehot[i] = 1
 
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+                    grad = (
+                        grad_output[r, :]
+                        * gamma
+                        * (
+                            (onehot - 1 / M) * ve_sqrt[r]
+                            - ve_half_inv[r]
+                            * (1 / M)
+                            * (input[r, i] - mean[r])
+                            * (input[r, :] - mean[r])
+                        )
+                        / ve[r]
+                    )
+                    grad_input[r, i] = torch.sum(grad)
 
-        # return gradients of the three tensor inputs and None for the constant eps
+        if ctx.needs_input_grad[1]:
+            grad_gamma = (grad_output * input_norm).T @ torch.ones(
+                S, dtype=torch.float64
+            )
+        if ctx.needs_input_grad[2]:
+            grad_beta = grad_output.T @ torch.ones(S, dtype=torch.float64)
+
         return grad_input, grad_gamma, grad_beta, None
 
 
@@ -186,15 +225,16 @@ class CustomLayerNormManualModule(nn.Module):
         """
         super(CustomLayerNormManualModule, self).__init__()
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
+        self.n_neurons = n_neurons
+        self.eps = eps
 
-        raise NotImplementedError
-
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        std = 0.001
+        self.gamma = nn.Parameter(
+            torch.normal(torch.zeros(self.n_neurons), std)
+        )
+        self.beta = nn.Parameter(
+            torch.normal(torch.zeros(self.n_neurons), std)
+        )
 
     def forward(self, input):
         """
@@ -211,16 +251,17 @@ class CustomLayerNormManualModule(nn.Module):
           Call it via its .apply() method.
         """
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
+        if len(input.size()) > 2:
+            raise ValueError("Input should be two-dimensional")
+        if input.size()[1] != self.n_neurons:
+            raise ValueError(
+                "n_neurons does not match size of second dimension of input"
+            )
 
-        raise NotImplementedError
-
-        ########################
-        # END OF YOUR CODE    #
-        #######################
-
+        custom_layer_norm_manual = CustomLayerNormManualFunction()
+        out = custom_layer_norm_manual.apply(
+            input, self.gamma, self.beta, self.eps
+        )
         return out
 
 
