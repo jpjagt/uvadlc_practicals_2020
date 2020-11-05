@@ -41,13 +41,16 @@ class CustomLayerNormAutograd(nn.Module):
         self.n_neurons = n_neurons
         self.eps = eps
 
-        std = 0.001
+        std = 5e-8
         self.gamma = nn.Parameter(
+            # torch.zeros(self.n_neurons)
             torch.normal(torch.zeros(self.n_neurons), std)
         )
         self.beta = nn.Parameter(
             torch.normal(torch.zeros(self.n_neurons), std)
         )
+        # nn.init.kaiming_uniform_(self.gamma, a=math.sqrt(5))
+        # nn.init.kaiming_uniform_(self.beta, a=math.sqrt(5))
 
     def forward(self, input):
         """
@@ -146,48 +149,28 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         grad_beta = grad_gamma = grad_input = None
 
         input, gamma, beta, var, mean, input_norm = ctx.saved_tensors
+        gamma = gamma.view(-1, 1)
+        mean = mean.view(-1, 1)
+        var = var.view(-1, 1)
         eps = ctx.eps
         S, M = grad_output.size()
 
         if ctx.needs_input_grad[0]:
-            grad_input = torch.zeros(input.size())
+            dy_mul_gamma = (grad_output @ gamma).view(-1, 1)
             ve = var + eps
-            ve_sqrt = torch.sqrt(ve)
             ve_half_inv = ve ** (-1 / 2)
-            for r in range(S):
-                for i in range(M):
-                    grad = torch.Tensor(
-                        [
-                            grad_output[r, l]
-                            * gamma[l]
-                            * (
-                                (int(l == i) - 1 / M) * ve_sqrt[r]
-                                - ve_half_inv[r]
-                                * (1 / M)
-                                * (input[r, i] - mean[r])
-                                * (input[r, l] - mean[r])
-                            )
-                            / ve[r]
-                            for l in range(M)
-                        ]
-                    )
-                    # xxx
-                    onehot = torch.zeros(M)
-                    onehot[i] = 1
-
-                    grad = (
-                        grad_output[r, :]
-                        * gamma
-                        * (
-                            (onehot - 1 / M) * ve_sqrt[r]
-                            - ve_half_inv[r]
-                            * (1 / M)
-                            * (input[r, i] - mean[r])
-                            * (input[r, :] - mean[r])
-                        )
-                        / ve[r]
-                    )
-                    grad_input[r, i] = torch.sum(grad)
+            ve_three_over_two_inv = ve ** (-3 / 2)
+            grad_input = ve_half_inv * (
+                grad_output * gamma.T - 1 / M * dy_mul_gamma
+            ) + (
+                -1
+                / M
+                * ve_three_over_two_inv
+                * (
+                    (dy_mul_gamma) * (-input * mean + mean * mean)
+                    + ((grad_output * input) @ gamma) * (input - mean)
+                )
+            )
 
         if ctx.needs_input_grad[1]:
             grad_gamma = (grad_output * input_norm).T @ torch.ones(
@@ -228,7 +211,7 @@ class CustomLayerNormManualModule(nn.Module):
         self.n_neurons = n_neurons
         self.eps = eps
 
-        std = 0.001
+        std = 5e-6
         self.gamma = nn.Parameter(
             torch.normal(torch.zeros(self.n_neurons), std)
         )
@@ -272,7 +255,7 @@ if __name__ == "__main__":
     # create random tensor with variance 2 and mean 3
     x = 2 * torch.randn(n_batch, n_neurons, requires_grad=True) + 10
     print(
-        "Input data:\n\tmeans={}\n\tvars={}".format(
+        "Input data:\n\tmean={}\n\tvars={}".format(
             x.mean(dim=1).data, x.var(dim=1).data
         )
     )
