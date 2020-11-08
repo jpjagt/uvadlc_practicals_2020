@@ -31,8 +31,7 @@
 
 We can write
 
-$$ Y_{kl} = \sum_m^M (X_{km} W_{lm}) + B_{kl} = \sum_m^M (X_{km} W_{lm}) + b_l
-$$
+$$ Y_{kl} = \sum_m^M (X_{km} W_{lm}) + B_{kl} = \sum_m^M (X_{km} W_{lm}) + b_l $$
 
 #+BEGIN_EXPORT latex
 Derivatives towards $\bf{W}$:
@@ -261,7 +260,7 @@ whereas the range of the ELU function is $(-1, \inf)$. This results in the fact
 that all output values of the hidden layers would be clamped to $(-1,
 1)$. Since these activation layers would only be used as hidden layers (rather
 than their output being the model's output), I don't see how this would be
-problematic.
+problematic; however, I might be overlooking some detail. <<TODO>>
 
 The output of the Tanh function also means that its derivatives become very
 small beyond the domain of $[-2, 2]$, while the ELU function has stronger
@@ -270,5 +269,27 @@ using ELU activation functions tend to converge more quickly than when using
 Tanh activation functions, which is a great benefit of ELU functions.
 
 * My very own Normalization Layer
+
+** automatic differentiation
+
+This section is just here to keep the correct section counts.
+
+** Manual implementation
+
+*** a
+
+#+BEGIN_EXPORT latex
+
+#+END_EXPORT
+
+*** d
+
+Layer normalization was created in response to batch normalization. Batch normalization
+was found to reduce training time and thus proving very useful, but it had some
+limitations. First, the efficacy of batch normalization greatly depended on the
+batch size, and specifically did not work well for small batch sizes. Second,
+batch normalization could not be applied to Recurrent Neural Networks (RNNs),
+because the variability of input sequences is not compatible with the
+assumptions batch normalization requires.
 
 * PyTorch CNN

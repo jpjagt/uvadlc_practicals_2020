@@ -36,21 +36,11 @@ class CustomLayerNormAutograd(nn.Module):
         """
         super(CustomLayerNormAutograd, self).__init__()
 
-        # self.n_neurons = torch.Tensor(n_neurons)
-        # self.eps = torch.Tensor(eps)
         self.n_neurons = n_neurons
         self.eps = eps
 
-        std = 5e-8
-        self.gamma = nn.Parameter(
-            # torch.zeros(self.n_neurons)
-            torch.normal(torch.zeros(self.n_neurons), std)
-        )
-        self.beta = nn.Parameter(
-            torch.normal(torch.zeros(self.n_neurons), std)
-        )
-        # nn.init.kaiming_uniform_(self.gamma, a=math.sqrt(5))
-        # nn.init.kaiming_uniform_(self.beta, a=math.sqrt(5))
+        self.gamma = nn.Parameter(torch.ones(self.n_neurons))
+        self.beta = nn.Parameter(torch.zeros(self.n_neurons))
 
     def forward(self, input):
         """
@@ -76,7 +66,9 @@ class CustomLayerNormAutograd(nn.Module):
 
         var, mean = torch.var_mean(input, dim=1, unbiased=False)
         input_norm = ((input.T - mean) / torch.sqrt(var + self.eps)).T
+
         out = self.gamma * input_norm + self.beta
+
         return out
 
 
@@ -126,7 +118,7 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         input_norm = ((input.T - mean) / torch.sqrt(var + eps)).T
         out = gamma * input_norm + beta
 
-        ctx.save_for_backward(input, gamma, beta, var, mean, input_norm)
+        ctx.save_for_backward(input, gamma, beta)
         ctx.eps = eps
         return out
 
@@ -148,11 +140,15 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         """
         grad_beta = grad_gamma = grad_input = None
 
-        input, gamma, beta, var, mean, input_norm = ctx.saved_tensors
+        input, gamma, beta = ctx.saved_tensors
+        eps = ctx.eps
+
+        var, mean = torch.var_mean(input, dim=1, unbiased=False)
+        input_norm = ((input.T - mean) / torch.sqrt(var + eps)).T
+
         gamma = gamma.view(-1, 1)
         mean = mean.view(-1, 1)
         var = var.view(-1, 1)
-        eps = ctx.eps
         S, M = grad_output.size()
 
         if ctx.needs_input_grad[0]:
@@ -211,13 +207,8 @@ class CustomLayerNormManualModule(nn.Module):
         self.n_neurons = n_neurons
         self.eps = eps
 
-        std = 5e-6
-        self.gamma = nn.Parameter(
-            torch.normal(torch.zeros(self.n_neurons), std)
-        )
-        self.beta = nn.Parameter(
-            torch.normal(torch.zeros(self.n_neurons), std)
-        )
+        self.gamma = nn.Parameter(torch.ones(self.n_neurons))
+        self.beta = nn.Parameter(torch.zeros(self.n_neurons))
 
     def forward(self, input):
         """
