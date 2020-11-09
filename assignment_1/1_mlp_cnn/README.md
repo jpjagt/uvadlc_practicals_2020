@@ -12,8 +12,8 @@
 
 - add the following lines in your ".bashrc":
 ```
-module load 2020
-module load Miniconda3/4.7.12.1
+module load 2019
+module load Miniconda3/4.7.10
 ```
 
 - logout and login again
@@ -37,4 +37,8 @@ for further information about Conda/Miniconda:
 https://docs.conda.io/projects/conda/en/latest/
 https://docs.conda.io/en/latest/miniconda.html
 https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-html.environments
+
+
+### Assignment update on 02.11.2020:
+Correction in Figure 1 and clarification of Question 4 a), moved ELU description to Question 1.2.
 

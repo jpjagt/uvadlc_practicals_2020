@@ -16,7 +16,7 @@ class MLP(object):
     Once initialized an MLP object can perform forward and backward.
     """
 
-    def __init__(self, n_inputs, n_hidden, n_classes, neg_slope):
+    def __init__(self, n_inputs, n_hidden, n_classes):
         """
         Initializes MLP object.
 
@@ -29,7 +29,6 @@ class MLP(object):
           n_classes: number of classes of the classification problem.
                      This number is required in order to specify the
                      output dimensions of the MLP
-          neg_slope: negative slope parameter for LeakyReLU
 
         TODO:
         Implement initialization of the network.
