@@ -16,6 +16,31 @@ class Flatten(nn.Module):
         return x.view(x.size()[0], -1)
 
 
+class PreAct2d(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=(3, 3),
+        stride=1,
+        padding=1,
+    ):
+        self.net = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(in_channels),
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+            ),
+        )
+
+    def forward(self, x):
+        return x + self.net(x)
+
+
 class ConvNet(nn.Module):
     """
     This class implements a Convolutional Neural Network in PyTorch.
@@ -41,7 +66,7 @@ class ConvNet(nn.Module):
             OrderedDict(
                 [
                     (
-                        "conv1",
+                        "conv0",
                         nn.Conv2d(
                             n_channels,
                             64,
@@ -51,13 +76,31 @@ class ConvNet(nn.Module):
                         ),
                     ),
                     (
+                        "PreAct1",
+                        PreAct2d(64, 64),
+                    ),
+                    (
+                        "conv1",
+                        nn.Conv2d(
+                            64, 128, kernel_size=(1, 1), stride=1, padding=0
+                        ),
+                    ),
+                    (
                         "maxpool1",
                         nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
                     ),
                     (
+                        "PreAct2_a",
+                        PreAct2d(128, 128),
+                    ),
+                    (
+                        "PreAct2_b",
+                        PreAct2d(128, 128),
+                    ),
+                    (
                         "conv2",
                         nn.Conv2d(
-                            64, 128, kernel_size=(3, 3), stride=1, padding=1
+                            128, 256, kernel_size=(1, 1), stride=1, padding=0
                         ),
                     ),
                     (
@@ -65,15 +108,17 @@ class ConvNet(nn.Module):
                         nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
                     ),
                     (
-                        "conv3_a",
-                        nn.Conv2d(
-                            128, 256, kernel_size=(3, 3), stride=1, padding=1
-                        ),
+                        "PreAct3_a",
+                        PreAct2d(256, 256),
                     ),
                     (
-                        "conv3_b",
+                        "PreAct3_b",
+                        PreAct2d(256, 256),
+                    ),
+                    (
+                        "conv3",
                         nn.Conv2d(
-                            256, 256, kernel_size=(3, 3), stride=1, padding=1
+                            256, 512, kernel_size=(1, 1), stride=1, padding=0
                         ),
                     ),
                     (
@@ -81,32 +126,24 @@ class ConvNet(nn.Module):
                         nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
                     ),
                     (
-                        "conv4_a",
-                        nn.Conv2d(
-                            256, 512, kernel_size=(3, 3), stride=1, padding=1
-                        ),
+                        "PreAct4_a",
+                        PreAct2d(512, 512),
                     ),
                     (
-                        "conv4_b",
-                        nn.Conv2d(
-                            512, 512, kernel_size=(3, 3), stride=1, padding=1
-                        ),
+                        "PreAct4_b",
+                        PreAct2d(512, 512),
                     ),
                     (
                         "maxpool4",
                         nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
                     ),
                     (
-                        "conv5_a",
-                        nn.Conv2d(
-                            512, 512, kernel_size=(3, 3), stride=1, padding=1
-                        ),
+                        "PreAct5_a",
+                        PreAct2d(512, 512),
                     ),
                     (
-                        "conv5_b",
-                        nn.Conv2d(
-                            512, 512, kernel_size=(3, 3), stride=1, padding=1
-                        ),
+                        "PreAct5_b",
+                        PreAct2d(512, 512),
                     ),
                     (
                         "maxpool5",
