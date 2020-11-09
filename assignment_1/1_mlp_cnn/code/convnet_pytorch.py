@@ -25,9 +25,10 @@ class PreAct2d(nn.Module):
         stride=1,
         padding=1,
     ):
+        super(PreAct2d, self).__init__()
         self.net = nn.Sequential(
             nn.BatchNorm2d(in_channels),
-            nn.ReLU(in_channels),
+            nn.ReLU(),
             nn.Conv2d(
                 in_channels,
                 out_channels,
@@ -150,6 +151,8 @@ class ConvNet(nn.Module):
                         nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
                     ),
                     ("flatten", Flatten()),
+                    ("BatchNorm2d", nn.BatchNorm1d(512)),
+                    ("ReLU", nn.ReLU()),
                     ("linear", nn.Linear(512, n_classes)),
                 ]
             )
