@@ -1,15 +1,19 @@
+# -*- org-export-babel-evaluate: nil -*-
 #+BIND: org-export-use-babel nil
 #+TITLE: DLC assignment 1: MLPs, CNNs & backpropagation
-#+AUTHOR: jeroen jagt
-#+EMAIL: <jpjagt@pm.me>
+#+AUTHOR: Jeroen Jagt@@latex:\\@@Master Artifical Intelligence@@latex:\\@@Universiteit van Amsterdam@@latex:\\@@jpjagt@pm.me
 #+DATE: October 29, 2020
+# #+STARTUP:
 #+LATEX: \setlength\parindent{0pt}
-#+LaTeX_HEADER: \usepackage{minted}
-#+LATEX_HEADER: \usepackage[margin=0.8in]{geometry}
-#+LATEX_HEADER_EXTRA:  \usepackage{mdframed}
-#+LATEX_HEADER_EXTRA: \BeforeBeginEnvironment{minted}{\begin{mdframed}}
-#+LATEX_HEADER_EXTRA: \AfterEndEnvironment{minted}{\end{mdframed}}
-#+MACRO: NEWLINE @@latex:\\@@ @@html:<br>@@
+#+LaTeX_HEADER: \usepackage[final]{nips_2018}
+#+LaTeX_HEADER: \usepackage[utf8]{inputenc} % allow utf-8 input
+#+LaTeX_HEADER: \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+#+LaTeX_HEADER: \usepackage{hyperref}       % hyperlinks
+#+LaTeX_HEADER: \usepackage{url}            % simple URL typesetting
+#+LaTeX_HEADER: \usepackage{booktabs}       % professional-quality tables
+#+LaTeX_HEADER: \usepackage{amsfonts}       % blackboard math symbols
+#+LaTeX_HEADER: \usepackage{nicefrac}       % compact symbols for 1/2, etc.
+#+LaTeX_HEADER: \usepackage{microtype}      % microtypography
 #+PROPERTY: header-args :exports both :session report :cache :results value
 #+OPTIONS: ^:nil
 #+LATEX_COMPILER: pdflatex
@@ -21,6 +25,7 @@
 \newcommand{\dr}[2]{\frac{\partial #1}{\partial #2}}
 \newcommand{\ykl}{\sum_m^M (X_{km} W_{lm}) + b_l}
 \newcommand{\drs}[1]{\sum_{k,l}^{S,N} \dr{L}{Y_{kl}} \dr{Y_{kl}}{#1}}
+\newcommand{\drsm}[1]{\sum_{k,l}^{S,M} \dr{L}{Y_{kl}} \dr{Y_{kl}}{#1}}
 #+END_EXPORT
 
 * MLP backprop
@@ -43,7 +48,7 @@ Derivatives towards $\bf{W}$:
 
 Then,
 
-$$\dr{L}{W_{ij}} = \drs{W_{ij}} = \sum_k^S \dr{L}{Y_{ki}} X_{kj} = (\dr{L}{\bt Y_{:i}})^T \bt X_{:j}$$ (where $:$ index denotes that entire axis).
+$$\dr{L}{W_{ij}} = \drs{W_{ij}} = \sum_k^S \dr{L}{Y_{ki}} X_{kj} = (\dr{L}{\bt Y_{:i}})^T \bt X_{:j}$$ (where the index $:$ denotes all elements of that dimension).
 
 Looking at the dimensions, we then see that
 
@@ -250,7 +255,7 @@ randomly until this result was achieved (test accuracy of =52.02%= in epoch
 #+ATTR_LATEX: :width 0.8\linewidth :float nil
 #+CAPTION: Loss and accuracy during training of the PyTorch MLP. The accuracy is graphed using a dashed line.
 #+label: fig:pytorch_mlp_results
-[[file:code/1604477470_train_mlp_pytorch_results.png]]
+[[file:code/1604477470_mlp_pytorch_results.png]]
 # id: 6810249
 
 ** Tanh vs ELU
@@ -272,15 +277,103 @@ Tanh activation functions, which is a great benefit of ELU functions.
 
 ** automatic differentiation
 
-This section is just here to keep the correct section counts.
+(this section is just here to keep the correct section counts).
 
 ** Manual implementation
 
 *** a
 
 #+BEGIN_EXPORT latex
+First, let's derive towards $\bt \gamma$:
 
+$$\dr{Y_{kl}}{\gamma_i} = \delta_{li} \hat{X}_{kl}$$
+
+Thus,
+
+$$\dr{L}{\gamma_i} = \drsm{\gamma_i} = \sum_{k,l}^{S,M} \dr{L}{Y_{kl}} \delta_{li} \hat{X}_{kl} = \sum_k^S \dr{L}{Y_{ki}} \hat{X}_{ki} = (\dr{L}{\bt Y_{:i}})^T \hat{\bt X}_{:i}$$
+
+$$\dr{L}{\bt \gamma} = \diag((\dr{L}{\bt Y})^T \hat{\bt X}) \text{ or } = (\dr{L}{\bt Y} \circ \hat{\bt X})^T \bt 1_S$$
+
+The derivative towards $\bt \beta$:
+
+$$\dr{Y_{kl}}{\beta_i} = \delta_{li}$$
+
+$$\dr{L}{\beta_i} = \drsm{\beta_i} = \sum_{k,l}^{S,M} \dr{L}{Y_{kl}} \delta_{li} = \sum_k^S \dr{L}{Y_{ki}} = (\dr{L}{\bt Y_{:i}})^T \bt 1_S$$
+
+$$\dr{L}{\bt \beta} = (\dr{L}{\bt Y})^T \bt 1_S$$
+
+Finally, the derivative towards $\bt X$. Since (elements of) $\bt X$ are also present in $\sigma^2_k$ and $\mu_k$, let's first do their derivatives:
+
+$$\dr{\mu_k}{X_{ri}} = \delta_{kr} \frac{1}{M}$$
+
+\newcommand{\del}[1]{\delta_{#1}}
+\newcommand{\fM}{\frac{1}{M}}
+\newcommand{\sM}{\sum_{m}^{M}}
+
+\begin{aligned}
+\dr{\sigma_k^2}{X_{ri}} &= \delta_{kr} \frac{1}{M} \sum^M_m \dr{}{X_{ri}} (X_{rm} - \mu_r)^2\\
+&= \del{kr} \fM \sM 2(X_{rm} - \mu_r)(\del{mi} - \del{rr} \fM)\\
+&= \del{kr} \fM 2 \sM (X_{rm} \del{mi} - X_{rm} \fM - \mu_r \del{mi} \mu_r \fM)\\
+&= \del{kr} \fM 2 (X_{ri} - \mu_r - \fM \sM(X_{rm} - \mu_r))\\
+&= \del{kr} \fM 2 (X_{ri} - \mu_r - (\fM \sM X_{rm} - \fM \sM \mu_r))\\
+&= \del{kr} \fM 2 (X_{ri} - \mu_r - (\mu_r - \mu_r))\\
+&= \del{kr} \fM 2 (X_{ri} - \mu_r)\\
+\end{aligned}
+
+Then, we can write down:
+
+\newcommand{\ve}{\left(\sigma^2_k + \epsilon\right)}
+
+\begin{aligned}
+\dr{\hat{X}_{kl}}{X_{ri}} &= \dr{}{X_{ri}} \frac{X_{kl} - \mu_k}{\sqrt{\sigma_k^2 + \epsilon}}\\
+&= \del{kr} \frac{(\del{kr} \del{li} - \del{kr} \fM) \sqrt{ve} - \frac{1}{2} (\ve)^{-1/2} \dr{\sigma^2_k}{X_{ri}} (X_{kl} - \mu_k)}{\ve}\\
+&= \del{kr} \frac{(\del{li} - \fM) \sqrt{ve} - \frac{1}{2} (\ve)^{-1/2} \frac{2}{M} (X_{ri} - \mu_r) (X_{kl} - \mu_k)}{\ve}\\
+&= \del{kr} \frac{(\del{li} - \fM) \sqrt{ve} - (\ve)^{-1/2} \frac{1}{M} (X_{ri} - \mu_r) (X_{kl} - \mu_k)}{\ve}\\
+\end{aligned}
+
+Then,
+
+\newcommand{\ver}{\left(\sigma^2 + \epsilon\right)}
+\newcommand{\veb}{\left(\boldsymbol{\sigma}^2 + \epsilon\right)}
+
+\begin{aligned}
+\dr{L}{X_{ri}} &= \sum_{k, l}^{S, M} \dr{L}{Y_{kl}} \dr{Y_{kl}}{X_{ri}}\\
+&= \sum_{k, l}^{S, M} \dr{L}{Y_{kl}} \gamma_l \dr{\hat{X}_{kl}}{X_{ri}}\\
+&= \sum_{k, l}^{S, M} \dr{L}{Y_{kl}} \gamma_l \del{kr} \frac{(\del{li} - \fM) \sqrt{ve} - (\ve)^{-1/2} \frac{1}{M} (X_{ri} - \mu_r) (X_{kl} - \mu_k)}{\ve}\\
+&= \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l \frac{(\del{li} - \fM) \sqrt{\ver} - (\ver)^{-1/2} \frac{1}{M} (X_{ri} - \mu_r) (X_{rl} - \mu_r)}{\ver}\\
+&= \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l \frac{(\del{li} - \fM) \sqrt{\ver} - (\ver)^{-1/2} \frac{1}{M} (X_{ri} - \mu_r) (X_{rl} - \mu_r)}{\ver}\\
+&= \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l \left( \frac{\del{li}\sqrt{\ver}}{\ver} - \frac{\fM \sqrt{\ver}}{\ver} - \frac{(\ver)^{-1/2} \frac{1}{M} (X_{ri} - \mu_r) (X_{rl} - \mu_r)}{\ver} \right)\\
+&= \dr{L}{Y_{il}} \gamma_i \frac{\sqrt{\ver}}{\ver} + \fM \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l \left( - \frac{\sqrt{\ver}}{\ver} - \frac{(\ver)^{-1/2} (X_{ri} - \mu_r) (X_{rl} - \mu_r)}{\ver} \right)\\
+&= \dr{L}{Y_{il}} \gamma_i \ver^{-1/2}\\
+&\quad- \fM \ver^{-3/2} \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l\\
+&\quad- \fM \ver^{-3/2} \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l (X_{rl} X_{ri} - X_{ri} \mu_r - X_{rl} \mu_r - \mu_r^2) \\
+&= \dr{L}{Y_{il}} \gamma_i \ver^{-1/2}\\
+&\quad- \fM \ver^{-3/2} \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l (1 - X_{ri} \mu_r + \mu_r^2)\\
+&\quad- \fM \ver^{-3/2} \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l X_{rl} (X_{ri} - \mu_r) \\
+&= \dr{L}{Y_{il}} \gamma_i \ver^{-1/2}\\
+&\quad- \fM \ver^{-3/2} (1 - X_{ri} \mu_r + \mu_r^2) \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l\\
+&\quad- \fM \ver^{-3/2} (X_{ri} - \mu_r) \sum_{l}^{M} \dr{L}{Y_{rl}} \gamma_l X_{rl} \\
+&= \dr{L}{Y_{il}} \gamma_i \ver^{-1/2}\\
+&\quad- \fM \ver^{-3/2} (1 - X_{ri} \mu_r + \mu_r^2) \left(\dr{L}{\bt{Y}_{r:}}\right) \bt{\gamma}\\
+&\quad- \fM \ver^{-3/2} (X_{ri} - \mu_r) \left(\left(\dr{L}{\bt{Y}_{r:}}\right) \circ \bt{X}_{r:}\right) \bt{\gamma} \\
+\end{aligned}
+
+After looking long and hard at the shapes of these elements, it is possible to see that the derivative towards $\bt{X}$ can be written as:
+
+\begin{aligned}
+\dr{L}{\bt X} =&\dr{L}{\bt Y} \circ (\veb^{-1/2} \boldsymbol{\gamma}^T)\\
+&- \fM \veb^{-3/2} \circ (\dr{L}{\bt Y} \boldsymbol{\gamma}) \circ (1 - \bt X \circ \boldsymbol{\mu}^T + \boldsymbol{\mu} \circ \boldsymbol{\mu})\\
+&- \fM \veb^{-3/2} \circ \left(( \dr{L}{\bt Y} \circ \bt X ) \boldsymbol{\gamma}\right) \circ (\bt X - \boldsymbol{\mu})
+\end{aligned}
 #+END_EXPORT
+
+*** b
+
+    See =custom_layergrad.py=.
+
+*** c
+
+    See =custom_layergrad.py=.
 
 *** d
 
@@ -292,4 +385,30 @@ batch normalization could not be applied to Recurrent Neural Networks (RNNs),
 because the variability of input sequences is not compatible with the
 assumptions batch normalization requires.
 
+Layer normalization is a way to perform normalization in between modules while
+not being plagued by these two issues. Because layer normalization functions
+separately on each layer in a single sample, its performance is independent of the batch
+size. In addition, this makes it work for RNNs too, because the length of the
+input sequence is irrelevant for its functioning.
+
+So what are limitations of layer normalization? Well, layer normalization
+obviously normalizes each sample individually, which means that each sample
+will have the same mean and variance. In the case that the mean and variance of
+samples carry meaningful information for the task at hand, this information
+gets lost after a =LayerNorm= module, so the network has to express this before
+the first =LayerNorm= module. This is not the case for BatchNorm, because the
+mean and variance is calculated over multiple samples, so the differences in
+these aggregates between samples is maintained.
+
 * PyTorch CNN
+
+** a
+
+My implementation of this ConvNet does indeed reach a final accuracy of
+=79.930= on the default parameters. The loss and accuracy during training of
+this run are displayed in Figure [[fig:convnet_results]]
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Loss and accuracy during training of the PyTorch ConvNet on default params. The accuracy is graphed using a dashed line.
+#+label: fig:convnet_results
+[[file:code/1604922308_convnet_results.png]]
