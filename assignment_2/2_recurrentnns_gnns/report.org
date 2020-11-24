@@ -1,0 +1,110 @@
+# -*- org-export-babel-evaluate: nil -*-
+#+BIND: org-export-use-babel nil
+#+TITLE: DLC assignment 2: RNNs & GNNs
+#+AUTHOR: Jeroen Jagt@@latex:\\@@Master Artifical Intelligence@@latex:\\@@Universiteit van Amsterdam@@latex:\\@@jpjagt@pm.me
+#+DATE: November 29, 2020
+# #+STARTUP:
+#+LATEX: \setlength\parindent{0pt}
+#+LaTeX_HEADER: \usepackage[final]{nips_2018}
+#+LaTeX_HEADER: \usepackage[utf8]{inputenc} % allow utf-8 input
+#+LaTeX_HEADER: \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+#+LaTeX_HEADER: \usepackage{hyperref}       % hyperlinks
+#+LaTeX_HEADER: \usepackage{url}            % simple URL typesetting
+#+LaTeX_HEADER: \usepackage{booktabs}       % professional-quality tables
+#+LaTeX_HEADER: \usepackage{amsfonts}       % blackboard math symbols
+#+LaTeX_HEADER: \usepackage{nicefrac}       % compact symbols for 1/2, etc.
+#+LaTeX_HEADER: \usepackage{microtype}      % microtypography
+#+PROPERTY: header-args :exports both :session report :cache :results value
+#+OPTIONS: ^:nil
+#+LATEX_COMPILER: pdflatex
+
+
+
+#+BEGIN_EXPORT latex
+\newcommand{\bt}[1]{\mathbf{#1}}
+\newcommand{\T}[1]{#1^{(T)}}
+\newcommand{\dr}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\drly}{\dr{\T{\mathcal{L}}}{\T{\hat{y}_k}}}
+#+END_EXPORT
+
+* RNNs
+
+** Q1.1
+
+(a)
+
+#+BEGIN_EXPORT latex
+\newcommand{\LL}{\mathcal{L}}
+\newcommand{\Whh}{\bt{W_{hh}}}
+\newcommand{\Wph}{\bt{W_{ph}}}
+
+\begin{align}
+  \dr{\T{\LL}}{\Wph} &= \sum_k^K \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\Wph}
+\end{align}
+
+(b)
+
+\begin{align}
+  \dr{\T\LL}{\Whh} &= \sum_k^K \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\Whh}\\
+                  &= \sum_k^K \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\T{\bt h}} \left( \sum^T_{i=0}\dr{\T{\bt h}}{\bt h^{(i)}} \dr{\bt h^{(i)}}{\Whh} \right)\\
+                  &= \sum_k^K \sum^T_{i=0} \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\T{\bt h}} \left( \prod_{j=i+1}^T \dr{\bt h^{(j)}}{\bt h^{(j-1)}} \right) \dr{\bt h^{(i)}}{\Whh}\\
+\end{align}
+#+END_EXPORT
+
+(c) We can see that no summation nor factorization over $T$ occurs in the first derivative
+$\dr{\T{\LL}}{\Wph}$. In other words, that derivative is independent of the
+temporal dimension of the data. This, however, is not the case for the second
+derivative $\dr{\T{\LL}}{\Whh}$, where we see both a summation and
+factorization over the temporal dimension ($T$). Two technical problems can
+occur thanks to this dependency: first, a large number of timesteps will cause
+this computation to be much more expensive; second, the factorization over
+$\dr{\bt h^{(j)}}{\bt h^{(j-1)}}$ will cause vanishing gradients in the case
+that $\dr{\bt h^{(j)}}{\bt h^{(j-1)}} << 1$.
+
+** Q1.2
+
+(a)
+
+$\bt g^{(t)}$: this vector represents the cell state according to the previous
+output and current input, i.e., based on (a transformation of) the previous
+output and the current input, this is what the model thinks the new cell state ought
+to be.
+
+$\bt f^{(t)}$: this vector controls which parts of the previous cell state are
+to be forgotten. The model decides, based on the previous output and the
+current input, how much (0-1) of each cell state value has become irrelevant,
+and the corresponding "instructions on what to forget" are encoded in this gate.
+
+$\bt o^{(t)}$: the output is based on the cell state, and the cell state
+alone. However, not everything in the cell state is going to be relevant for
+this particular output. This gate controls which parts of the cell state are
+going to form the output, which is a decision based on the previous output and
+the current input (i.e., $\bt o^{(t)}$ is computed using the previous output
+and current input).
+
+(b)
+
+#+BEGIN_EXPORT latex
+\newcommand{\W}[1]{\bt{W_{#1}}}
+\newcommand{\bias}[1]{\bt{b_{#1}}}
+\newcommand{\Ni}{N_{input}}
+\newcommand{\Nh}{N_{hidden}}
+\newcommand{\No}{N_{output}}
+
+Considering the extremely vague formulation of this question, I'll specify as
+to how I understood the prompt:
+#+END_EXPORT
+
+- $\Ni$ is the size of vector $\bt h^{(t-1)}$.
+- $\Nh$ is the size of vector $\bt h^{(t)}$ (and by extension, also of
+  $\bt c^{(t)}$, among others).
+- $\No$ is the size of vector $\bt p^{(t)}$
+
+#+BEGIN_EXPORT latex
+If these are the correct assumptions, then the total number of trainable
+parameters can be found using:
+
+$$total = 4 \Nh (d + \Ni + 1) + \No (\Nh + 1)$$
+#+END_EXPORT
+
+** Q1.3
