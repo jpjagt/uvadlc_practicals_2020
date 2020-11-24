@@ -112,7 +112,7 @@ def train_for_seed(config, seed):
     elif config.dataset == "bipalindrome":
         print("Load binary palindrome dataset ...")
         # Initialize the dataset and data loader
-        config.num_classes = config.input_length
+        config.num_classes = 2
         dataset = datasets.BinaryPalindromeDataset(config.input_length)
         data_loader = DataLoader(
             dataset, config.batch_size, num_workers=1, drop_last=True
@@ -166,8 +166,8 @@ def train_for_seed(config, seed):
         ).to(device)
 
     # Setup the loss and optimizer
-    # loss_function = torch.nn.NLLLoss()
-    loss_function = torch.nn.CrossEntropyLoss()
+    loss_function = torch.nn.NLLLoss()
+    # loss_function = torch.nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
     for step, (batch_inputs, batch_targets) in enumerate(data_loader):
@@ -333,9 +333,6 @@ if __name__ == "__main__":
 
     config = parser.parse_args()
 
-    try:
-        # Train the model
-        print(f"timestamp: {timestamp}")
-        train(config)
-    except KeyboardInterrupt:
-        plot_results(config)
+    # Train the model
+    print(f"timestamp: {timestamp}")
+    train(config)
