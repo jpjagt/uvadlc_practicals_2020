@@ -40,6 +40,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import defaultdict
+import copy
 
 # You may want to look into tensorboardX for logging
 # from tensorboardX import SummaryWriter
@@ -235,8 +236,8 @@ def train_for_seed(config, seed):
 
 
 def train(config):
-    for seed in [0, 42, 84]:
-        train_for_seed(config, seed)
+    for seed in [42, 0, 84]:
+        train_for_seed(copy.deepcopy(config), seed)
     print("Done training.")
     plot_results(config)
 
@@ -295,7 +296,7 @@ if __name__ == "__main__":
         help="Number of examples to process in a batch",
     )
     parser.add_argument(
-        "--learning_rate", type=float, default=0.001, help="Learning rate"
+        "--learning_rate", type=float, default=0.0001, help="Learning rate"
     )
     parser.add_argument(
         "--train_steps",

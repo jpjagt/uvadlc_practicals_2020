@@ -108,3 +108,44 @@ $$total = 4 \Nh (d + \Ni + 1) + \No (\Nh + 1)$$
 #+END_EXPORT
 
 ** Q1.3
+
+I implemented the =LSTM= using a one-hot encoding of the input, rather than
+embeddings. This means that every input digit is transformed from a single
+integer into a vector where every element equals zero, except for the element
+whose index corresponds to the input digit, which is set to one. Just like an embedding,
+doing this avoids the implicit differences in distance between input digits as
+integers, which is the problem with that representation.
+
+My assigned experiment was that of training an =LSTM= on the =bipalindrome=
+dataset, while variating the sequence length to be either =10= or
+=20=. The results of these two experiments are displayed in Figure
+[[fig:lstm_results_10]] and Figure [[fig:lstm_results_20]], respectively.
+
+We can see that for a sequence length of =10=, the =LSTM= model is able to
+converge to a perfect accuracy within 900 training steps. Interestingly enough,
+both accuracy and loss seem to plateau earlier, with a swift increase in
+accuracy and decrease in loss shortly before convergence. This is interesting,
+because at no point in training is there any mutation of training setup, i.e.,
+no techniques such as a LR scheduler are used. Apparently, the model just
+needed to get through some plateau on the loss landscape, before being able to
+converge to a local minimum.
+
+When inspecting the model run on the data with a sequence length of =20=, we
+can see that the =LSTM= model is not able to converge.
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Averaged loss and accuracy during training of =LSTM= on =bipalindrome= dataset with a =sequence_length= of =10=.
+#+label: fig:lstm_results_10
+[[file:/Users/jeroen/code/UvA/msc/dlc/uvadlc_practicals_2020/assignment_2/2_recurrentnns_gnns/code/Part 1/plots/1606308292_train_results.png]]
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Averaged loss and accuracy during training of =LSTM= on =bipalindrome= dataset with a =sequence_length= of =20=.
+#+label: fig:lstm_results_20
+[[file:/Users/jeroen/code/UvA/msc/dlc/uvadlc_practicals_2020/assignment_2/2_recurrentnns_gnns/code/Part 1/plots/1606307805_train_results.png]]
+
+** Q1.4
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Averaged loss and accuracy during training of =peepLSTM= on =bipalindrome= dataset.
+#+label: fig:peep_lstm_results
+[[file:/Users/jeroen/code/UvA/msc/dlc/uvadlc_practicals_2020/assignment_2/2_recurrentnns_gnns/code/Part 1/plots/_train_results.png]]
