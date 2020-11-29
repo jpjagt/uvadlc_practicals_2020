@@ -12,6 +12,7 @@ activation_fns = {
     "ELU": nn.ELU,
     "RELU": nn.ReLU,
     "Hardshrink": nn.Hardshrink,
+    "Tanh": nn.Tanh,
 }
 
 
