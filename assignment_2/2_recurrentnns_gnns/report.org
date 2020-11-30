@@ -47,7 +47,7 @@
 \begin{align}
   \dr{\T\LL}{\Whh} &= \sum_k^K \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\Whh}\\
                   &= \sum_k^K \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\T{\bt h}} \left( \sum^T_{i=0}\dr{\T{\bt h}}{\bt h^{(i)}} \dr{\bt h^{(i)}}{\Whh} \right)\\
-                  &= \sum_k^K \sum^T_{i=0} \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\T{\bt h}} \left( \prod_{j=i+1}^T \dr{\bt h^{(j)}}{\bt h^{(j-1)}} \right) \dr{\bt h^{(i)}}{\Whh}\\
+                  &= \sum_k^K \sum^T_{i=0} \drly \dr{\T{\hat{y}_k}}{\T p_k} \dr{\T p_k}{\T{\bt h}} \left( \prod_{j=i+1}^T \dr{\bt h^{(j)}}{\bt h^{(j-1)}} \right) \dr{\bt h^{(i)}}{\Whh}
 \end{align}
 #+END_EXPORT
 
@@ -156,3 +156,235 @@ plot. So the model seems to be able to converge sometimes, but not always.
 #+CAPTION: Averaged loss and accuracy during training of =LSTM= on =bipalindrome= dataset with a =sequence_length= of =20=.
 #+label: fig:lstm_results_20
 [[file:/Users/jeroen/code/UvA/msc/dlc/uvadlc_practicals_2020/assignment_2/2_recurrentnns_gnns/code/Part 1/plots/1606377927_train_results.png]]
+
+* Text generation
+
+** Q2.1
+*** a
+
+I trained my model on the English book titled =Grimm's fairy tales=.
+
+My hyperparameters were as follows:
+- =batch_size=: increased this to =2048=, because larger batch sizes invariably
+  led to an increase in accuracy.
+- =train_steps=: typically, as training continued, the model was able to
+  slightly improve accuracy (see Figure [[fig:textgen_results]]), and so this was
+  set to =12000=.
+- =learning_rate=: because of the usage of a LR scheduler, I felt that the
+  initial LR could be higher in order to boost early training, and set it to =0.008=.
+- =learning_rate_decay=: in combination with a higher LR, this decay was set to
+  only =0.3= in order to tune down the LR for later finetuning of the model.
+- =learning_rate_step=: this was set to =2500=.
+- =max_norm=: kept at the default =5.0=
+- =lstm_num_hidden=: kept at the default =128=.
+
+The model was able to reach a maximum accuracy of =0.656= at step =11439=, just
+before the training ended. Note that this accuracy is on the training set, and
+so it is not expected to decrease much. In fact, near the latter part of
+training, the model has probably heavily overfitted on the training data, but
+there is no validation set to prove this. Besides, the accuracy on the training
+set barely increased beyond around step =4000= (where it has reached =0.640=
+accuracy), suggesting that further training will not yield great benefits.
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Loss and accuracy during training of =TextGeneration= LSTM on book =Grimms fairy tales=.
+#+label: fig:textgen_results
+[[file:/Users/jeroen/code/UvA/msc/dlc/uvadlc_practicals_2020/assignment_2/2_recurrentnns_gnns/code/Part
+2/plots/1606472211_gen_results.png]]
+
+*** b
+
+Since sampling at =1/3=, =2/3= and =3/3= of the run discussed in the previous
+sub-question will yield much similar results (and is therefore rather boring),
+I chose to display some samples at steps =1333=, =2666=, and =4000=. Note,
+however, that the samples were still rather similar at each of these three
+stages.
+
+*samples at =1333=*
+
+/(NB: =-= have been added by author)/
+
+#+BEGIN_EXPORT latex
+\begin{verbatim}
+[len=30, start=a] and said, ‘I will go to the st
+[len=180, start=a] and said, ‘I will go to the stread of the stream the wolf -
+was all the world was a shart of the stream the wolf was all the world was a -
+shart of the stream the wolf was all the worl
+\end{verbatim}
+#+END_EXPORT
+
+We see that a 30-character sequence is actually syntactically correct and
+semantically meaningful English! The model generates a quote when speech should
+begin (after =said,=). However, when we extend the generated sequence, the
+sequence length that the model was trained on starts to become visible: a
+pattern is being repeated, without the sentence ever ending (which it
+definitely should, and does in the training set).
+
+*samples at =2666=*
+
+#+BEGIN_EXPORT latex
+\begin{verbatim}
+[len=30, start=V] VELIED AND THE SAUSAGE
+     TH
+\end{verbatim}
+#+END_EXPORT
+
+At every evaluated stage of training, sequences that started with a capital
+letter typically did not fare well, the above being a typical example of such
+generation, containing a random newline, and incorrect words. Likely this is
+the result of relatively little occurrences of capital letters in the training
+data. However, I am surprised that the model continues in uppercase -- perhaps
+certain titles or sections in the training data are written in uppercase.
+
+*samples at =4000=*
+
+#+BEGIN_EXPORT latex
+\begin{verbatim}
+[len=30, start=“] “I will not see the work of th
+[len=180, start=“] “I will not see the work of the stream, and the soldier -
+said to himself, ‘I will give you the world to the stars, and the soldier s-
+aid to himself, ‘I will give you the world to the
+[len=180, start=a] and the soldier said to himself, ‘I will give you the wo-
+rld to the stars, and the soldier said to himself, ‘I will give you the wor-
+ld to the stars, and the soldier said to himself,
+\end{verbatim}
+#+END_EXPORT
+
+Again, short sequences work well, and longer sequences fall into
+repetition. Note that no matter the starting character, the repetitions
+typically contain the same words (across samples).
+
+
+*coherence*
+
+As is visible in the examples above, sequences of 30 chars or shorter look like
+exemplary English, both syntactically and semantically. For longer sequences,
+the shortcomings of the model become obvious, typically falling into a
+repetition of the same phrases -- but then again, it was trained on sequences
+of 30 characters, so it did not learn to capture any longer-term dependencies
+than present in those.
+
+*** c
+
+Mathematically, the parameter $\tau$ works in conjunction with the exponential
+that is present in the softmax function. Without this exponential, the
+normalization would cause the temperature to be canceled out. However, with it,
+the effect of the temperature essentially is as follows: the larger the
+temperature, the more pointed/inequal the output distribution of the softmax
+becomes, with the largest values of $x_i$ being assigned larger
+probabilities. As $\tau \rightarrow 0$, the sampling becomes completely random
+(with the probability values $\forall_i x_i = \frac{1}{N}$); in the other
+limit, as $\tau \rightarrow \inf$, the largest $x_i$ will be assigned a
+probability of $1.0$, constituting deterministic sampling.
+
+Here, I will showcase an example sequence, for multiple sampling strategies
+(all are from the same model, evaluated at train step $3999$, same starting
+character =a=, newlines removed):
+
+- *[greedy]:* and the soldier said to himself, ‘I will give you the world to the stars, and the soldier said to himself, ‘I will give you the world to the stars, and the soldier said to himself,
+- *[random, $\tau=0.5$]:* a5R55‘NOp)2GuxiG7MBa﻿btun(;hI: I wn(nZct“or!’ ‘Oro9Ss i338 Br!t dap!i/Vwi,yersGve#1kBeoth(;an-oghtw6#R3v.no! Upn0k‘Vut42UO ”puAt.iBe7wZcur poCiP@X0QAVodJNakS*V9 ‘ozee,KIrk7Ochck
+- *[random, $\tau=1.0$]:*  aQueeoun was #esic!’ 1.aking enetwelone to aguSo, we“thingKeineos, she had cCaEJQno ENt hore killedcyBr,and woefeK?’; on the dput the erking; he he mWered them ]o :One ]torn pes
+- *[random, $\tau=2.0$]:* at the meantime the peasant and had to have so service that she saw that the door as the morning sat all the ran and said, ‘Now care and dresses of well into the stream, and ready,
+
+We see that none of the randomly sampled sequences get stuck in a loop, like
+the greedy sampled sequence does; furthermore, the temperature appears to
+control how randomly the next character is sampled: at =0.5=, it appears
+completely random; at =1.0=, we recognize some blurbs of English-looking
+character sequences; at =2.0=, we see only English words, but there is
+no grammatical correctness throughout more than a few words (which is not to be
+expected, considering the 30-char sequences the model was trained on).
+
+* Graph Neural Networks
+** Q3.1
+*(a)* Unraveling this equation, we see that $\left[\hat{A} H^{(l)}\right]_{ij} =
+\sum_n^N \hat{A}_{in} H^{(l)}_{nj} \eq \frac{1}{N}(h_{ij} - \sum_{n \in \mathcal{N}(i)} h_{nj})$,
+which is the operation of averaging the $j$th feature of all nodes in the
+neighbourhood of $h_i$, including $h_i$ itself. We see that the structural
+information about (the edges of) the graph present in $\hat{A}$ is exploited to
+"filter" the averaging on the neighbourhood nodes of the target node $h_i$, and
+their "message" (i.e. their features) is passed through the multiplication of
+$\hat{A}$ with $H^{(l)}$ (the latter of which stores the message of each
+node). The weight matrix $W^{(l)}$, applies a linear mapping to the result of
+this message passing (and the non-linear $\sigma$ makes the whole shebang
+non-linear).
+
+*(b)* The adjacency matrix $\hat{A} \in \mathbb{R}^{N\times N}$. For large
+graphs with many nodes, it becomes infeasible to construct and use this
+adjacency matrix due to its size (even though it is binary).
+The solution for this limitation is to optimize the representation of the set
+of edges in terms of its memory usage. For instance, a list of edges might be
+used, for which $2N$ references to nodes (e.g., indices) are required (and
+thus, scales better than $N \times N$).
+
+
+** Q3.2
+*(a)* $$\tilde{A} = \begin{bmatrix}
+1 & 1 & 0 & 0 & 1 & 1 \\
+1 & 1 & 0 & 1 & 0 & 0 \\
+0 & 0 & 1 & 1 & 0 & 0 \\
+0 & 1 & 1 & 1 & 0 & 1 \\
+1 & 0 & 0 & 0 & 1 & 0 \\
+1 & 0 & 0 & 1 & 0 & 1
+\end{bmatrix}$$
+
+*(b)* $C$ is a fourth-degree connection of $E$ (the shortest path comprises of
+four edges). Since each update will propagate the signal one edge, it will take
+four updates.
+
+** Q3.3
+Right now, the equation is simply an unweighted average, which we want to be
+weighted by some similarity measure $s(h_i, h_j)$. We can define some MLP
+$\texttt{MLP}$ to
+compute the similarity, which takes two nodes as input, and returns their
+degree of similarity (i.e., the weights). The weights are normalized using a
+softmax, and a non-linearity $f$ is added, which is required in
+order to preserve the dependency of the weight w.r.t. node $h_i$. Then, the
+equation becomes:
+
+$$h_i^{(l+1)} = \sigma \left( \sum_{j \in \mathcal{N}(i)}
+\text{softmax}_{\mathcal{N}(i)} (f(\texttt{MLP}(h_i^{(l)},  h_j^{(l)}))) W^{(l)} h_j^{(l)} \right)$$
+
+** Q3.4
+
+1. In social networks: determining who, based on a graph representing social
+   connections in some social media platform, knows each other in real life and
+   who does not. This task is an instance of edge classification: for each
+   (undirected) edge, you want to determine whether it is a connection made "in
+   real life" or exclusively online.
+
+2. In image processing: improving the semantic relations between recognized
+   objects. Object detection has seen great improvements in the past decade or
+   so, but that has not made it trivial to understand and express the
+   relationships between these detected objects: for instance, a human and
+   horse are very relevant to each other if the human is mounted on the
+   horse. A hammer is related to nails, even though they might be far
+   apart. Such relationships could be found by GNNs, which would designate edge
+   features between nodes that represent the detected objects on an image.
+
+** Q3.5
+*(a)* Since the same data can be represented in both ways (sequence and graph),
+we should consider the differences in which the data is considered by the model
+corresponding to either representation (RNN vs GNN). I do not think that the
+fundamental difference is the sequential vs unordered nature of these
+architectures: for instance, an RNN can be emulated by a directed graph where
+each node only has two edges at most: one incoming, and one outgoing (which
+ensures data blindness to "future" items in a sequence). I think that their
+main difference might in fact be the hidden state / memory, because I cannot
+think of a way in which this object might be represented in a GNN. And so, I
+think that RNNs would work better on tasks in which the model needs to maintain
+additional data (outside of the features of the data points themselves), which
+it can store in a memory. Additionally, I think arbitrary (multiple) connections are
+difficult to express in an RNN architecture, and that therefore, GNNs will, for
+instance, perform better in tasks in which a node/datapoint is connected to
+many other datapoints (in various ways).
+
+*(b)* Personally, I was thinking about the prediction of stock market
+   prices. The stock price of any listed company is a time series in itself
+   (apt for consumption by a RNN architecture) -- however, between companies
+   and other trackers, prices are correlated. These correlations between
+   companies might be represented as a graph, with edges denoting the type of
+   relationship (positively correlated, inversely correlated), and nodes
+   denoting information about the company (perhaps some semantic embedding of
+   the company), and some predictive model combining LSTM and GNN architectures
+   in order to predict the next price (i.e., element in a time series) while
+   using the context of the stock prices of other companies (i.e., nodes).
