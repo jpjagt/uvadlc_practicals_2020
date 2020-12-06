@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # -*- mode: gitignore; -*-
 *~
 \#*\#
@@ -49,6 +48,6 @@ flycheck_*.el
 /network-security.data
 
 __pycache__
-=======
 .idea
->>>>>>> 3cc7ba5c491b9233531abd158476840b3731cc57
+
+assignment_3/3_generative/data
