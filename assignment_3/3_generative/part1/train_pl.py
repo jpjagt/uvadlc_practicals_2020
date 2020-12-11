@@ -138,7 +138,13 @@ class VAE(pl.LightningModule):
 
 
 class GenerateCallback(pl.Callback):
-    def __init__(self, batch_size=64, every_n_epochs=5, save_to_disk=False):
+    def __init__(
+        self,
+        batch_size=64,
+        every_n_epochs=10,
+        save_to_disk=False,
+        use_visualize_manifold=False,
+    ):
         """
         Inputs:
             batch_size - Number of images to generate
@@ -149,6 +155,7 @@ class GenerateCallback(pl.Callback):
         self.batch_size = batch_size
         self.every_n_epochs = every_n_epochs
         self.save_to_disk = save_to_disk
+        self.use_visualize_manifold = use_visualize_manifold
 
     def on_epoch_end(self, trainer, pl_module):
         """
@@ -173,10 +180,15 @@ class GenerateCallback(pl.Callback):
         # - You can access the tensorboard logger via trainer.logger.experiment
         # - Use the torchvision function "make_grid" to create a grid of multiple images
         # - Use the torchvision function "save_image" to save an image grid to disk
+        print("epoch", epoch)
 
-        x_samples, x_mean = pl_module.sample(self.batch_size)
-        img_grid_samples = make_grid(x_samples)
-        img_grid_mean = make_grid(x_mean)
+        if self.use_visualize_manifold:
+            img_grid_samples = visualize_manifold(pl_module.decoder)
+            img_grid_mean = img_grid_samples
+        else:
+            x_samples, x_mean = pl_module.sample(self.batch_size)
+            img_grid_samples = make_grid(x_samples)
+            img_grid_mean = make_grid(x_mean)
         log_dir = Path(trainer.logger.log_dir)
         trainer.logger.experiment.add_image(
             "Samples/Samples", img_grid_samples, epoch
@@ -202,13 +214,16 @@ def train_vae(args):
     )
 
     # Create a PyTorch Lightning trainer with the generation callback
-    gen_callback = GenerateCallback(save_to_disk=True)
+    gen_callback = GenerateCallback(
+        save_to_disk=True, use_visualize_manifold=args.use_visualize_manifold
+    )
     trainer = pl.Trainer(
         default_root_dir=args.log_dir,
         checkpoint_callback=ModelCheckpoint(
             save_weights_only=True, mode="min", monitor="val_bpd"
         ),
-        gpus=1 if torch.cuda.is_available() else 0,
+        # gpus=1 if torch.cuda.is_available() else 0,
+        gpus=0,
         max_epochs=args.epochs,
         callbacks=[gen_callback],
         progress_bar_refresh_rate=1 if args.progress_bar else 0,
@@ -320,6 +335,13 @@ if __name__ == "__main__":
             "Use a progress bar indicator for interactive experimentation. "
             "Not to be used in conjuction with SLURM jobs"
         ),
+    )
+
+    parser.add_argument(
+        "--use_visualize_manifold",
+        default=False,
+        type=bool,
+        help=("Use visualize_manifold or not"),
     )
 
     args = parser.parse_args()

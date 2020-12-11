@@ -35,7 +35,8 @@ def sample_reparameterize(mean, std):
             The tensor should have the same shape as the mean and std input tensors.
     """
 
-    z = mean + std * torch.normal(0, torch.ones(size=std.size()))
+    ones = torch.ones(size=std.size(), device=mean.device)
+    z = mean + std * torch.normal(0, ones)
     return z
 
 
@@ -95,11 +96,14 @@ def visualize_manifold(decoder, grid_size=20):
     # - You can use torchvision's function "make_grid" to combine the grid_size**2 images into a grid
     # - Remember to apply a sigmoid after the decoder
 
+    device = decoder.device
     dim_z = 2
-    grid_range = torch.arange(0.5, grid_size + 0.5, step=0.5) / (grid_size + 1)
+    grid_range = torch.arange(0.5, grid_size + 0.5, step=0.5).to(device) / (
+        grid_size + 1
+    )
     xx, yy = torch.meshgrid(grid_range, grid_range)
-    xx = xx.apply_(lambda coord: norm.ppf(coord)).view(-1, 1)
-    yy = yy.apply_(lambda coord: norm.ppf(coord)).view(-1, 1)
+    xx = xx.apply_(lambda coord: norm.ppf(coord)).reshape(-1, 1)
+    yy = yy.apply_(lambda coord: norm.ppf(coord)).reshape(-1, 1)
     # decoder takes z = [B, dim_z]. here, B = grid_size ** 2
     # where coordinates are ordered left-to-right, top-to-bottom
     z = torch.stack([xx, yy], dim=1)
