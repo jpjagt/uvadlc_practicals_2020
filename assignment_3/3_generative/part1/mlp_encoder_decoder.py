@@ -20,7 +20,6 @@ import numpy as np
 
 
 class MLPEncoder(nn.Module):
-
     def __init__(self, input_dim=784, hidden_dims=[512], z_dim=20):
         """
         Encoder with an MLP network and ReLU activations (except the output layer).
@@ -34,9 +33,16 @@ class MLPEncoder(nn.Module):
         super().__init__()
 
         # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
-        # Feel free to experiment with the architecture yourself, but the one specified here is 
+        # Feel free to experiment with the architecture yourself, but the one specified here is
         # sufficient for the assignment.
-        raise NotImplementedError
+        modules = []
+        dims = [input_dim] + hidden_dims
+        for dim_i in range(len(dims) - 1):
+            modules.extend(
+                [nn.Linear(dims[dim_i], dims[dim_i + 1]), nn.ReLU()]
+            )
+        modules.append(nn.Linear(dims[-1], z_dim * 2))
+        self.encoder = nn.Sequential(*modules)
 
     def forward(self, x):
         """
@@ -48,15 +54,13 @@ class MLPEncoder(nn.Module):
                       of the latent distributions.
         """
 
-        # Remark: Make sure to understand why we are predicting the log_std and not std
-        mean = None
-        log_std = None
-        raise NotImplementedError
+        B = x.size()[0]
+        z = self.encoder(x.view(B, -1))
+        mean, log_std = z.chunk(2, dim=1)
         return mean, log_std
 
 
 class MLPDecoder(nn.Module):
-
     def __init__(self, z_dim=20, hidden_dims=[512], output_shape=[1, 28, 28]):
         """
         Decoder with an MLP network.
@@ -70,10 +74,14 @@ class MLPDecoder(nn.Module):
         super().__init__()
         self.output_shape = output_shape
 
-        # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
-        # Feel free to experiment with the architecture yourself, but the one specified here is 
-        # sufficient for the assignment.
-        raise NotImplementedError
+        modules = []
+        dims = [z_dim] + hidden_dims
+        for dim_i in range(len(dims) - 1):
+            modules.extend(
+                [nn.Linear(dims[dim_i], dims[dim_i + 1]), nn.ReLU()]
+            )
+        modules.append(nn.Linear(dims[-1], np.product(output_shape)))
+        self.decoder = nn.Sequential(*modules)
 
     def forward(self, z):
         """
@@ -84,10 +92,9 @@ class MLPDecoder(nn.Module):
                 This should be a logit output *without* a sigmoid applied on it.
                 Shape: [B,output_shape[0],output_shape[1],output_shape[2]]
         """
-
-        x = None
-        raise NotImplementedError
-        return x
+        B = z.size()[0]
+        x = self.decoder(z)
+        return x.view(B, *self.output_shape)
 
     @property
     def device(self):

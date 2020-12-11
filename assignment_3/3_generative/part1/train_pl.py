@@ -16,6 +16,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -32,7 +33,6 @@ from utils import *
 
 
 class VAE(pl.LightningModule):
-
     def __init__(self, model_name, hidden_dims, num_filters, z_dim, lr):
         """
         PyTorch Lightning module that summarizes all components to train a VAE.
@@ -46,9 +46,13 @@ class VAE(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        if model_name == 'MLP':
+        self.z_dim = z_dim
+
+        if model_name == "MLP":
             self.encoder = MLPEncoder(z_dim=z_dim, hidden_dims=hidden_dims)
-            self.decoder = MLPDecoder(z_dim=z_dim, hidden_dims=hidden_dims[::-1])
+            self.decoder = MLPDecoder(
+                z_dim=z_dim, hidden_dims=hidden_dims[::-1]
+            )
         else:
             self.encoder = CNNEncoder(z_dim=z_dim, num_filters=num_filters)
             self.decoder = CNNDecoder(z_dim=z_dim, num_filters=num_filters)
@@ -65,10 +69,22 @@ class VAE(pl.LightningModule):
                   This is also the loss we train on. Shape: single scalar
         """
 
-        L_rec = None
-        L_reg = None
-        bpd = None
-        raise NotImplementedError
+        B = imgs.size(0)
+        z_mean, z_log_std = self.encoder(imgs)
+        z = sample_reparameterize(z_mean, torch.exp(z_log_std))
+        bern_params = self.decoder(z).sigmoid()
+
+        bern_probs = bern_params ** imgs * (1 - bern_params) ** (1 - imgs)
+        log_bern_probs = torch.log(bern_probs)
+        img_prob = torch.sum(log_bern_probs.view(B, -1), dim=1)
+
+        L_rec_full = img_prob
+        L_reg_full = KLD(z_mean, z_log_std)
+        elbo = L_rec_full - L_reg_full
+        L_rec = torch.mean(L_rec_full)
+        L_reg = torch.mean(L_reg_full)
+        bpd = torch.mean(elbo_to_bpd(elbo, imgs.size()))
+
         return L_rec, L_reg, bpd
 
     @torch.no_grad()
@@ -83,9 +99,9 @@ class VAE(pl.LightningModule):
                      between 0 and 1 from which we obtain "x_samples".
                      Shape: [B,C,H,W]
         """
-        x_mean = None
-        x_samples = None
-        raise NotImplementedError
+        z = torch.normal(0.0, torch.ones((batch_size, self.z_dim)))
+        x_mean = self.decoder(z).sigmoid()
+        x_samples = torch.bernoulli(x_mean)
         return x_samples, x_mean
 
     def configure_optimizers(self):
@@ -96,8 +112,12 @@ class VAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # Make use of the forward function, and add logging statements
         L_rec, L_reg, bpd = self.forward(batch[0])
-        self.log("train_reconstruction_loss", L_rec, on_step=False, on_epoch=True)
-        self.log("train_regularization_loss", L_reg, on_step=False, on_epoch=True)
+        self.log(
+            "train_reconstruction_loss", L_rec, on_step=False, on_epoch=True
+        )
+        self.log(
+            "train_regularization_loss", L_reg, on_step=False, on_epoch=True
+        )
         self.log("train_ELBO", L_rec + L_reg, on_step=False, on_epoch=True)
         self.log("train_bpd", bpd, on_step=False, on_epoch=True)
 
@@ -118,7 +138,6 @@ class VAE(pl.LightningModule):
 
 
 class GenerateCallback(pl.Callback):
-
     def __init__(self, batch_size=64, every_n_epochs=5, save_to_disk=False):
         """
         Inputs:
@@ -136,8 +155,8 @@ class GenerateCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
-            self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
+        if (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+            self.sample_and_save(trainer, pl_module, trainer.current_epoch + 1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
         """
@@ -155,7 +174,19 @@ class GenerateCallback(pl.Callback):
         # - Use the torchvision function "make_grid" to create a grid of multiple images
         # - Use the torchvision function "save_image" to save an image grid to disk
 
-        raise NotImplementedError
+        x_samples, x_mean = pl_module.sample(self.batch_size)
+        img_grid_samples = make_grid(x_samples)
+        img_grid_mean = make_grid(x_mean)
+        log_dir = Path(trainer.logger.log_dir)
+        trainer.logger.experiment.add_image(
+            "Samples/Samples", img_grid_samples, epoch
+        )
+        trainer.logger.experiment.add_image(
+            "Samples/Mean", img_grid_mean, epoch
+        )
+        if self.save_to_disk:
+            save_image(x_samples, log_dir / f"{epoch}_samples.png")
+            save_image(x_mean, log_dir / f"{epoch}_samples.png")
 
 
 def train_vae(args):
@@ -166,80 +197,130 @@ def train_vae(args):
     """
 
     os.makedirs(args.log_dir, exist_ok=True)
-    train_loader, val_loader, test_loader = bmnist(batch_size=args.batch_size,
-                                                   num_workers=args.num_workers)
+    train_loader, val_loader, test_loader = bmnist(
+        batch_size=args.batch_size, num_workers=args.num_workers
+    )
 
     # Create a PyTorch Lightning trainer with the generation callback
     gen_callback = GenerateCallback(save_to_disk=True)
-    trainer = pl.Trainer(default_root_dir=args.log_dir,
-                         checkpoint_callback=ModelCheckpoint(save_weights_only=True, mode="min", monitor="val_bpd"),
-                         gpus=1 if torch.cuda.is_available() else 0,
-                         max_epochs=args.epochs,
-                         callbacks=[gen_callback],
-                         progress_bar_refresh_rate=1 if args.progress_bar else 0) 
-    trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
+    trainer = pl.Trainer(
+        default_root_dir=args.log_dir,
+        checkpoint_callback=ModelCheckpoint(
+            save_weights_only=True, mode="min", monitor="val_bpd"
+        ),
+        gpus=1 if torch.cuda.is_available() else 0,
+        max_epochs=args.epochs,
+        callbacks=[gen_callback],
+        progress_bar_refresh_rate=1 if args.progress_bar else 0,
+    )
+    trainer.logger._default_hp_metric = (
+        None  # Optional logging argument that we don't need
+    )
 
     # Create model
     pl.seed_everything(args.seed)  # To be reproducible
-    model = VAE(model_name=args.model,
-                hidden_dims=args.hidden_dims,
-                num_filters=args.num_filters,
-                z_dim=args.z_dim,
-                lr=args.lr)
+    model = VAE(
+        model_name=args.model,
+        hidden_dims=args.hidden_dims,
+        num_filters=args.num_filters,
+        z_dim=args.z_dim,
+        lr=args.lr,
+    )
 
     # Training
     gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
     trainer.fit(model, train_loader, val_loader)
 
     # Testing
-    model = VAE.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-    test_result = trainer.test(model, test_dataloaders=test_loader, verbose=True)
+    model = VAE.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path
+    )
+    test_result = trainer.test(
+        model, test_dataloaders=test_loader, verbose=True
+    )
 
     # Manifold generation
     if args.z_dim == 2:
         img_grid = visualize_manifold(model.decoder)
-        save_image(img_grid,
-                   os.path.join(trainer.logger.log_dir, 'vae_manifold.png'),
-                   normalize=False)
+        save_image(
+            img_grid,
+            os.path.join(trainer.logger.log_dir, "vae_manifold.png"),
+            normalize=False,
+        )
 
     return test_result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Feel free to add more argument parameters
     parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     # Model hyperparameters
-    parser.add_argument('--model', default='MLP', type=str,
-                        help='What model to use in the VAE',
-                        choices=['MLP', 'CNN'])
-    parser.add_argument('--z_dim', default=20, type=int,
-                        help='Dimensionality of latent space')
-    parser.add_argument('--hidden_dims', default=[512], type=int, nargs='+',
-                        help='Hidden dimensionalities to use inside the network. To specify multiple, use " " to separate them. Example: "512 256"')
-    parser.add_argument('--num_filters', default=32, type=int,
-                        help='Number of channels/filters to use in the CNN encoder/decoder.')
+    parser.add_argument(
+        "--model",
+        default="MLP",
+        type=str,
+        help="What model to use in the VAE",
+        choices=["MLP", "CNN"],
+    )
+    parser.add_argument(
+        "--z_dim", default=20, type=int, help="Dimensionality of latent space"
+    )
+    parser.add_argument(
+        "--hidden_dims",
+        default=[512],
+        type=int,
+        nargs="+",
+        help='Hidden dimensionalities to use inside the network. To specify multiple, use " " to separate them. Example: "512 256"',
+    )
+    parser.add_argument(
+        "--num_filters",
+        default=32,
+        type=int,
+        help="Number of channels/filters to use in the CNN encoder/decoder.",
+    )
 
     # Optimizer hyperparameters
-    parser.add_argument('--lr', default=1e-3, type=float,
-                        help='Learning rate to use')
-    parser.add_argument('--batch_size', default=128, type=int,
-                        help='Minibatch size')
+    parser.add_argument(
+        "--lr", default=1e-3, type=float, help="Learning rate to use"
+    )
+    parser.add_argument(
+        "--batch_size", default=128, type=int, help="Minibatch size"
+    )
 
     # Other hyperparameters
-    parser.add_argument('--epochs', default=80, type=int,
-                        help='Max number of epochs')
-    parser.add_argument('--seed', default=42, type=int,
-                        help='Seed to use for reproducing results')
-    parser.add_argument('--num_workers', default=4, type=int,
-                        help='Number of workers to use in the data loaders. To have a truly deterministic run, this has to be 0. ' + \
-                             'For your assignment report, you can use multiple workers (e.g. 4) and do not have to set it to 0.')
-    parser.add_argument('--log_dir', default='VAE_logs', type=str,
-                        help='Directory where the PyTorch Lightning logs should be created.')
-    parser.add_argument('--progress_bar', action='store_true',
-                        help=('Use a progress bar indicator for interactive experimentation. '
-                              'Not to be used in conjuction with SLURM jobs'))
+    parser.add_argument(
+        "--epochs", default=80, type=int, help="Max number of epochs"
+    )
+    parser.add_argument(
+        "--seed",
+        default=42,
+        type=int,
+        help="Seed to use for reproducing results",
+    )
+    parser.add_argument(
+        "--num_workers",
+        default=4,
+        type=int,
+        help="Number of workers to use in the data loaders. To have a truly deterministic run, this has to be 0. "
+        + "For your assignment report, you can use multiple workers (e.g. 4) and do not have to set it to 0.",
+    )
+    parser.add_argument(
+        "--log_dir",
+        default="VAE_logs",
+        type=str,
+        help="Directory where the PyTorch Lightning logs should be created.",
+    )
+    parser.add_argument(
+        "--progress_bar",
+        action="store_true",
+        help=(
+            "Use a progress bar indicator for interactive experimentation. "
+            "Not to be used in conjuction with SLURM jobs"
+        ),
+    )
 
     args = parser.parse_args()
 

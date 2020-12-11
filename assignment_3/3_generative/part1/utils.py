@@ -19,6 +19,9 @@ from torchvision.utils import make_grid
 import numpy as np
 from scipy.stats import norm
 
+from operator import mul
+from functools import reduce
+
 
 def sample_reparameterize(mean, std):
     """
@@ -28,12 +31,11 @@ def sample_reparameterize(mean, std):
         std - Tensor of arbitrary shape with strictly positive values. Denotes the standard deviation
               of the distribution
     Outputs:
-        z - A sample of the distributions, with gradient support for both mean and std. 
+        z - A sample of the distributions, with gradient support for both mean and std.
             The tensor should have the same shape as the mean and std input tensors.
     """
 
-    z = None
-    raise NotImplementedError
+    z = mean + std * torch.normal(0, torch.ones(size=std.size()))
     return z
 
 
@@ -49,9 +51,13 @@ def KLD(mean, log_std):
               The values represent the Kullback-Leibler divergence to unit Gaussians.
     """
 
-    KLD = None
-    raise NotImplementedError
-    return KLD
+    std = torch.exp(log_std)
+    var = std ** 2
+    kld_elems = 0.5 * (var + mean ** 2 - 1 - torch.log(var))
+    return kld_elems.sum(dim=-1)
+
+
+log2e = np.log2(np.e)
 
 
 def elbo_to_bpd(elbo, img_shape):
@@ -63,8 +69,8 @@ def elbo_to_bpd(elbo, img_shape):
     Outputs:
         bpd - The negative log likelihood in bits per dimension for the given image.
     """
-    bpd = None
-    raise NotImplementedError
+    size_multiplied = reduce(mul, img_shape, 1)
+    bpd = -elbo * log2e * (size_multiplied ** -1)
     return bpd
 
 
@@ -89,7 +95,14 @@ def visualize_manifold(decoder, grid_size=20):
     # - You can use torchvision's function "make_grid" to combine the grid_size**2 images into a grid
     # - Remember to apply a sigmoid after the decoder
 
-    img_grid = None
-    raise NotImplementedError
-
+    dim_z = 2
+    grid_range = torch.arange(0.5, grid_size + 0.5, step=0.5) / (grid_size + 1)
+    xx, yy = torch.meshgrid(grid_range, grid_range)
+    xx = xx.apply_(lambda coord: norm.ppf(coord)).view(-1, 1)
+    yy = yy.apply_(lambda coord: norm.ppf(coord)).view(-1, 1)
+    # decoder takes z = [B, dim_z]. here, B = grid_size ** 2
+    # where coordinates are ordered left-to-right, top-to-bottom
+    z = torch.stack([xx, yy], dim=1)
+    images = decoder(z).sigmoid()
+    img_grid = make_grid(images, nrow=grid_size)
     return img_grid
