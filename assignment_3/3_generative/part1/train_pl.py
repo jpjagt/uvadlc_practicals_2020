@@ -196,7 +196,7 @@ class GenerateCallback(pl.Callback):
         trainer.logger.experiment.add_image(
             "Samples/Mean", img_grid_mean, epoch
         )
-        if self.save_to_disk:
+        if self.save_to_disk and not self.use_visualize_manifold:
             save_image(x_samples, log_dir / f"{epoch}_samples.png")
             save_image(x_mean, log_dir / f"{epoch}_samples.png")
 

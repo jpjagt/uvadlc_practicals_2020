@@ -102,8 +102,8 @@ def visualize_manifold(decoder, grid_size=20):
         grid_size + 1
     )
     xx, yy = torch.meshgrid(grid_range, grid_range)
-    xx = xx.apply_(lambda coord: norm.ppf(coord)).reshape(-1, 1)
-    yy = yy.apply_(lambda coord: norm.ppf(coord)).reshape(-1, 1)
+    xx = xx.apply_(lambda coord: norm.ppf(coord)).reshape(-1)
+    yy = yy.apply_(lambda coord: norm.ppf(coord)).reshape(-1)
     # decoder takes z = [B, dim_z]. here, B = grid_size ** 2
     # where coordinates are ordered left-to-right, top-to-bottom
     z = torch.stack([xx, yy], dim=1)
