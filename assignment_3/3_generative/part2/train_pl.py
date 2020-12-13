@@ -354,7 +354,7 @@ def train_gan(args):
     trainer = pl.Trainer(
         default_root_dir=args.log_dir,
         checkpoint_callback=ModelCheckpoint(save_weights_only=True),
-        gpus=1 if torch.cuda.is_available() else 0,
+        gpus=int(args.gpu) if torch.cuda.is_available() else 0,
         max_epochs=args.epochs,
         callbacks=[gen_callback, inter_callback],
         progress_bar_refresh_rate=1 if args.progress_bar else 0,
@@ -443,6 +443,9 @@ if __name__ == "__main__":
     # Other hyperparameters
     parser.add_argument(
         "--epochs", default=250, type=int, help="Number of epochs to train."
+    )
+    parser.add_argument(
+        "--gpu", default=True, type=bool, help="use gpu or not."
     )
     parser.add_argument(
         "--seed",
