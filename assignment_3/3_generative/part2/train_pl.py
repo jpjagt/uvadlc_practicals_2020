@@ -19,18 +19,27 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from torchvision.utils import make_grid, save_image
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pathlib import Path
+import numpy as np
 
 from mnist import mnist
 from models import GeneratorMLP, DiscriminatorMLP
 
 
 class GAN(pl.LightningModule):
-
-    def __init__(self, hidden_dims_gen, hidden_dims_disc, dp_rate_gen,
-                 dp_rate_disc, z_dim, lr):
+    def __init__(
+        self,
+        hidden_dims_gen,
+        hidden_dims_disc,
+        dp_rate_gen,
+        dp_rate_disc,
+        z_dim,
+        lr,
+    ):
         """
         PyTorch Lightning module that summarizes all components to train a GAN.
 
@@ -47,11 +56,20 @@ class GAN(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.generator = GeneratorMLP(z_dim=z_dim,
-                                         hidden_dims=hidden_dims_gen,
-                                         dp_rate=dp_rate_gen)
-        self.discriminator = DiscriminatorMLP(hidden_dims=hidden_dims_disc,
-                                                 dp_rate=dp_rate_disc)
+        self.z_dim = z_dim
+        self.generator = GeneratorMLP(
+            z_dim=z_dim, hidden_dims=hidden_dims_gen, dp_rate=dp_rate_gen
+        )
+        self.discriminator = DiscriminatorMLP(
+            hidden_dims=hidden_dims_disc, dp_rate=dp_rate_disc
+        )
+        self.loss_fn = nn.BCELoss()
+
+    def __gen_z(self, batch_size):
+        ones = torch.ones(size=(batch_size, self.z_dim)).to(
+            self.generator.device
+        )
+        return torch.normal(0, ones)
 
     @torch.no_grad()
     def sample(self, batch_size):
@@ -63,8 +81,8 @@ class GAN(pl.LightningModule):
         Outputs:
             x - Generated images of shape [B,C,H,W]
         """
-        x = None
-        raise NotImplementedError
+        z = self.__gen_z(batch_size)
+        x = self.generator(z)
         return x
 
     @torch.no_grad()
@@ -82,17 +100,30 @@ class GAN(pl.LightningModule):
             x - Generated images of shape [B,interpolation_steps+2,C,H,W]
         """
 
-        x = None
-        raise NotImplementedError
+        start = self.__gen_z(batch_size)
+        end = self.__gen_z(batch_size)
+        z_steps = torch.stack(
+            [
+                start * step + end * (1.0 - step)
+                for step in np.linspace(1.0, 0.0, interpolation_steps + 2)
+            ],
+            dim=1,
+        )
+        x = self.generator(z_steps)
         return x
 
     def configure_optimizers(self):
         # Create optimizer for both generator and discriminator.
         # You can use the Adam optimizer for both models.
         # It is recommended to reduce the momentum (beta1) to e.g. 0.5
-        optimizer_gen = None
-        optimizer_disc = None
-        raise NotImplementedError
+        optimizer_gen = optim.Adam(
+            self.generator.parameters(), lr=self.hparams.lr, betas=(0.5, 0.999)
+        )
+        optimizer_disc = optim.Adam(
+            self.discriminator.parameters(),
+            lr=self.hparams.lr,
+            betas=(0.5, 0.999),
+        )
         return [optimizer_gen, optimizer_disc], []
 
     def training_step(self, batch, batch_idx, optimizer_idx):
@@ -137,10 +168,15 @@ class GAN(pl.LightningModule):
             loss - The loss for the generator to optimize
         """
 
-        loss = None
-        self.log("generator/loss", loss)
-        raise NotImplementedError
+        batch_size = x_real.size(0)
 
+        z = self.__gen_z(batch_size)
+        x = self.generator(z)
+        y_pred = self.discriminator(x).sigmoid()
+        y = torch.ones(batch_size).to(self.generator.device)
+        loss = self.loss_fn(y_pred.squeeze(), y)
+
+        self.log("generator/loss", loss)
         return loss
 
     def discriminator_step(self, x_real):
@@ -157,17 +193,30 @@ class GAN(pl.LightningModule):
             loss - The loss for the discriminator to optimize
         """
 
-        # Remark: there are more metrics that you can add. 
-        # For instance, how about the accuracy of the discriminator?
-        loss = None
-        self.log("generator/loss", loss)
-        raise NotImplementedError
+        device = self.generator.device
+        batch_size = x_real.size(0)
+        x_gen = self.sample(batch_size)
+        y_pred = self.discriminator(
+            torch.cat([x_real, x_gen], dim=0)
+        ).sigmoid()
+        y = torch.cat(
+            [
+                torch.ones(batch_size).to(device),
+                torch.zeros(batch_size).to(device),
+            ],
+            dim=0,
+        )
+
+        loss = self.loss_fn(y_pred.squeeze(), y)
+        with torch.no_grad():
+            accuracy = (1 - ((y_pred > 0.2).int() - y).abs()).mean()
+        self.log("discriminator/loss", loss)
+        self.log("discriminator/accuracy", accuracy)
 
         return loss
 
 
 class GenerateCallback(pl.Callback):
-
     def __init__(self, batch_size=64, every_n_epochs=10, save_to_disk=False):
         """
         Callback for adding generations of your model to TensorBoard and/or
@@ -189,8 +238,8 @@ class GenerateCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
-            self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
+        if (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+            self.sample_and_save(trainer, pl_module, trainer.current_epoch + 1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
         """
@@ -209,13 +258,23 @@ class GenerateCallback(pl.Callback):
         # - Use torchvision function "make_grid" to create a grid of multiple images
         # - Use torchvision function "save_image" to save an image grid to disk
 
-        raise NotImplementedError
+        print("epoch", epoch)
+        x_samples = pl_module.sample(self.batch_size)
+        img_grid_samples = make_grid(x_samples)
+        log_dir = Path(trainer.logger.log_dir)
+        trainer.logger.experiment.add_image("samples", img_grid_samples, epoch)
+        if self.save_to_disk:
+            save_image(x_samples, log_dir / f"{epoch}_samples.png")
 
 
 class InterpolationCallback(pl.Callback):
-
-    def __init__(self, batch_size=4, interpolation_steps=5,
-                 every_n_epochs=10, save_to_disk=False):
+    def __init__(
+        self,
+        batch_size=4,
+        interpolation_steps=5,
+        every_n_epochs=10,
+        save_to_disk=False,
+    ):
         """
         Callback for adding interpolations between two images to TensorBoard
         and/or save them to disk every N epochs across training.
@@ -239,8 +298,8 @@ class InterpolationCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
-            self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
+        if (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+            self.sample_and_save(trainer, pl_module, trainer.current_epoch + 1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
         """
@@ -259,10 +318,21 @@ class InterpolationCallback(pl.Callback):
         # - Use the torchvision function "make_grid" to create a grid of multiple images
         # - Use the torchvision function "save_image" to save an image grid to disk
 
-        # You also have to implement this function in a later question of the assignemnt. 
-        # By default it is skipped to allow you to test your other code so far. 
-        print("WARNING: Interpolation function has not been implemented yet.")
-        pass
+        x_samples = pl_module.interpolate(
+            self.batch_size, self.interpolation_steps
+        )
+        B, I, C, H, W = x_samples.size()
+        x_samples = x_samples.view(B * I, C, H, W)
+        # one interpolation every row
+        img_grid_samples = make_grid(x_samples, nrow=B)
+        log_dir = Path(trainer.logger.log_dir)
+        trainer.logger.experiment.add_image(
+            "interpolation_samples", img_grid_samples, epoch
+        )
+        if self.save_to_disk:
+            save_image(
+                x_samples, log_dir / f"{epoch}_interpolation_samples.png"
+            )
 
 
 def train_gan(args):
@@ -274,86 +344,132 @@ def train_gan(args):
     """
 
     os.makedirs(args.log_dir, exist_ok=True)
-    train_loader = mnist(batch_size=args.batch_size,
-                         num_workers=args.num_workers)
+    train_loader = mnist(
+        batch_size=args.batch_size, num_workers=args.num_workers
+    )
 
     # Create a PyTorch Lightning trainer with the generation callback
     gen_callback = GenerateCallback(save_to_disk=True)
     inter_callback = InterpolationCallback(save_to_disk=True)
-    trainer = pl.Trainer(default_root_dir=args.log_dir,
-                         checkpoint_callback=ModelCheckpoint(
-                             save_weights_only=True),
-                         gpus=1 if torch.cuda.is_available() else 0,
-                         max_epochs=args.epochs,
-                         callbacks=[gen_callback,
-                                    inter_callback],
-                         progress_bar_refresh_rate=1 if args.progress_bar else 0)
+    trainer = pl.Trainer(
+        default_root_dir=args.log_dir,
+        checkpoint_callback=ModelCheckpoint(save_weights_only=True),
+        gpus=1 if torch.cuda.is_available() else 0,
+        max_epochs=args.epochs,
+        callbacks=[gen_callback, inter_callback],
+        progress_bar_refresh_rate=1 if args.progress_bar else 0,
+    )
     # Optional logging argument that we don't need
     trainer.logger._default_hp_metric = None
 
     # Create model
     pl.seed_everything(args.seed)  # To be reproducable
-    model = GAN(hidden_dims_gen=args.hidden_dims_gen,
-                hidden_dims_disc=args.hidden_dims_disc,
-                dp_rate_gen=args.dp_rate_gen,
-                dp_rate_disc=args.dp_rate_disc,
-                z_dim=args.z_dim,
-                lr=args.lr)
+    model = GAN(
+        hidden_dims_gen=args.hidden_dims_gen,
+        hidden_dims_disc=args.hidden_dims_disc,
+        dp_rate_gen=args.dp_rate_gen,
+        dp_rate_disc=args.dp_rate_disc,
+        z_dim=args.z_dim,
+        lr=args.lr,
+    )
 
     if not args.progress_bar:
-        print("\nThe progress bar has been surpressed. For updates on the training progress, " + \
-              "check the TensorBoard file at " + trainer.logger.log_dir + ". If you " + \
-              "want to see the progress bar, use the argparse option \"progress_bar\".\n")
+        print(
+            "\nThe progress bar has been surpressed. For updates on the training progress, "
+            + "check the TensorBoard file at "
+            + trainer.logger.log_dir
+            + ". If you "
+            + 'want to see the progress bar, use the argparse option "progress_bar".\n'
+        )
 
     # Training
     gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
+    inter_callback.sample_and_save(trainer, model, epoch=0)
     trainer.fit(model, train_loader)
 
     return model
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Feel free to add more argument parameters
     parser = argparse.ArgumentParser()
 
     # Model hyperparameters
-    parser.add_argument('--z_dim', default=32, type=int,
-                        help='Dimensionality of latent space')
-    parser.add_argument('--hidden_dims_gen', default=[128, 256, 512], 
-                        type=int, nargs='+',
-                        help='Hidden dimensionalities to use inside the ' + \
-                             'generator. To specify multiple, use " " to ' + \
-                             'separate them. Example: \"128 256 512\"')
-    parser.add_argument('--hidden_dims_disc', default=[512, 256], 
-                        type=int, nargs='+',
-                        help='Hidden dimensionalities to use inside the ' + \
-                             'discriminator. To specify multiple, use " " to ' + \
-                             'separate them. Example: \"512 256\"')
-    parser.add_argument('--dp_rate_gen', default=0.1, type=float,
-                        help='Dropout rate in the discriminator')
-    parser.add_argument('--dp_rate_disc', default=0.3, type=float,
-                        help='Dropout rate in the discriminator')
+    parser.add_argument(
+        "--z_dim", default=32, type=int, help="Dimensionality of latent space"
+    )
+    parser.add_argument(
+        "--hidden_dims_gen",
+        default=[128, 256, 512],
+        type=int,
+        nargs="+",
+        help="Hidden dimensionalities to use inside the "
+        + 'generator. To specify multiple, use " " to '
+        + 'separate them. Example: "128 256 512"',
+    )
+    parser.add_argument(
+        "--hidden_dims_disc",
+        default=[512, 256],
+        type=int,
+        nargs="+",
+        help="Hidden dimensionalities to use inside the "
+        + 'discriminator. To specify multiple, use " " to '
+        + 'separate them. Example: "512 256"',
+    )
+    parser.add_argument(
+        "--dp_rate_gen",
+        default=0.1,
+        type=float,
+        help="Dropout rate in the discriminator",
+    )
+    parser.add_argument(
+        "--dp_rate_disc",
+        default=0.3,
+        type=float,
+        help="Dropout rate in the discriminator",
+    )
 
     # Optimizer hyperparameters
-    parser.add_argument('--lr', default=2e-4, type=float,
-                        help='Learning rate to use')
-    parser.add_argument('--batch_size', default=128, type=int,
-                        help='Batch size to use for training')
+    parser.add_argument(
+        "--lr", default=2e-4, type=float, help="Learning rate to use"
+    )
+    parser.add_argument(
+        "--batch_size",
+        default=128,
+        type=int,
+        help="Batch size to use for training",
+    )
 
     # Other hyperparameters
-    parser.add_argument('--epochs', default=250, type=int,
-                        help='Number of epochs to train.')
-    parser.add_argument('--seed', default=42, type=int,
-                        help='Seed to use for reproducing results')
-    parser.add_argument('--num_workers', default=4, type=int,
-                        help='Number of workers to use in the data loaders.' + \
-                             'To have a truly deterministic run, this has to be 0.')
-    parser.add_argument('--log_dir', default='GAN_logs/', type=str,
-                        help='Directory where the PyTorch Lightning logs ' + \
-                             'should be created.')
-    parser.add_argument('--progress_bar', action='store_true',
-                        help='Use a progress bar indicator for interactive experimentation. '+ \
-                             'Not to be used in conjuction with SLURM jobs.')
+    parser.add_argument(
+        "--epochs", default=250, type=int, help="Number of epochs to train."
+    )
+    parser.add_argument(
+        "--seed",
+        default=42,
+        type=int,
+        help="Seed to use for reproducing results",
+    )
+    parser.add_argument(
+        "--num_workers",
+        default=4,
+        type=int,
+        help="Number of workers to use in the data loaders."
+        + "To have a truly deterministic run, this has to be 0.",
+    )
+    parser.add_argument(
+        "--log_dir",
+        default="GAN_logs/",
+        type=str,
+        help="Directory where the PyTorch Lightning logs "
+        + "should be created.",
+    )
+    parser.add_argument(
+        "--progress_bar",
+        action="store_true",
+        help="Use a progress bar indicator for interactive experimentation. "
+        + "Not to be used in conjuction with SLURM jobs.",
+    )
 
     args = parser.parse_args()
 

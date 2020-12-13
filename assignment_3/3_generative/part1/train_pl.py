@@ -83,7 +83,7 @@ class VAE(pl.LightningModule):
         elbo = L_rec_full - L_reg_full
         L_rec = torch.mean(L_rec_full)
         L_reg = torch.mean(L_reg_full)
-        bpd = torch.mean(elbo_to_bpd(elbo, imgs.size()))
+        bpd = torch.mean(elbo_to_bpd(-elbo, imgs.size()))
 
         return L_rec, L_reg, bpd
 
@@ -184,7 +184,7 @@ class GenerateCallback(pl.Callback):
 
         if self.use_visualize_manifold:
             img_grid_samples = visualize_manifold(pl_module.decoder)
-            img_grid_mean = img_grid_samples
+            x_samples = x_mean = img_grid_mean = img_grid_samples
         else:
             x_samples, x_mean = pl_module.sample(self.batch_size)
             img_grid_samples = make_grid(x_samples)
@@ -196,9 +196,9 @@ class GenerateCallback(pl.Callback):
         trainer.logger.experiment.add_image(
             "Samples/Mean", img_grid_mean, epoch
         )
-        if self.save_to_disk and not self.use_visualize_manifold:
-            save_image(x_samples, log_dir / f"{epoch}_samples.png")
-            save_image(x_mean, log_dir / f"{epoch}_samples.png")
+        # if self.save_to_disk and not self.use_visualize_manifold:
+        save_image(x_samples, log_dir / f"{epoch}_samples.png")
+        save_image(x_mean, log_dir / f"{epoch}_samples.png")
 
 
 def train_vae(args):

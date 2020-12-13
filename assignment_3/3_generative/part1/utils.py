@@ -70,8 +70,8 @@ def elbo_to_bpd(elbo, img_shape):
     Outputs:
         bpd - The negative log likelihood in bits per dimension for the given image.
     """
-    size_multiplied = reduce(mul, img_shape, 1)
-    bpd = -elbo * log2e * (size_multiplied ** -1)
+    size_multiplied = reduce(mul, img_shape[1:], 1)
+    bpd = elbo * log2e * (size_multiplied ** -1)
     return bpd
 
 
@@ -98,12 +98,13 @@ def visualize_manifold(decoder, grid_size=20):
 
     device = decoder.device
     dim_z = 2
-    grid_range = torch.arange(0.5, grid_size + 0.5, step=0.5).to(device) / (
-        grid_size + 1
-    )
-    xx, yy = torch.meshgrid(grid_range, grid_range)
-    xx = xx.apply_(lambda coord: norm.ppf(coord)).reshape(-1)
-    yy = yy.apply_(lambda coord: norm.ppf(coord)).reshape(-1)
+    grid_range = np.arange(0.5, grid_size + 0.5) / (grid_size + 1)
+    norm_grid_range = torch.Tensor(
+        [norm.ppf(coord) for coord in grid_range]
+    ).to(device)
+    xx, yy = torch.meshgrid(norm_grid_range, norm_grid_range)
+    xx = xx.reshape(-1)
+    yy = yy.reshape(-1)
     # decoder takes z = [B, dim_z]. here, B = grid_size ** 2
     # where coordinates are ordered left-to-right, top-to-bottom
     z = torch.stack([xx, yy], dim=1)

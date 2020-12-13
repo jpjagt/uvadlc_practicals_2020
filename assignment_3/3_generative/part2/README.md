@@ -8,18 +8,18 @@ This folder contains the template code for implementing your own GAN model. This
 * `unittests.py`: Contains unittests for the Generator and Discriminator network. It will hopefully help you debugging your code. Your final code should pass these unittests.
 * `utils.py`: Contains logging utilities for TensorBoard. Only needed for `train_torch.py`.
 
-A lot of code is already provided to you. Try to familiarize yourself with the code structure before starting your implementation. 
+A lot of code is already provided to you. Try to familiarize yourself with the code structure before starting your implementation.
 Your task is to fill in the missing code pieces (indicated by `NotImplementedError` or warnings printed). The main missing pieces are:
 
 * In `model.py`, you need to implement the Generator and Discriminator network. We suggest a network architecture in the comments.
 * The training files `train_torch.py`/`train_pl.py` are build up in a similar manner. In both, you need to implement:
-  * The optimizer definition. As we train two models with different loss functions, you should use two separate optimizers here. One optimizer handles the parameters of the Discriminator, and the second handles the parameters of the Generator. 
+  * The optimizer definition. As we train two models with different loss functions, you should use two separate optimizers here. One optimizer handles the parameters of the Discriminator, and the second handles the parameters of the Generator.
   * A `generator_step` function which returns the loss for a single training iteration of the Generator.
   * A `discriminator_step` function which returns the loss for a single training iteration of the Discriminator.
   * A `sample` function that creates new images with the Generator. You shoud log/save those in the function `generate_and_save`/callback `GenerateCallback`
   * A `interpolation` function that randomly samples pairs of latent vectors between which we interpolate and look at the generated images. You should log/save those images in the function `interpolate_and_save`/callback `InterpolationCallback`
   * Additionally in the `train_torch.py` file, you need to implement a training loop for a single epoch in `train_gan`. PyTorch Lightning automatically does this using internal code.
-  
+
 Default hyperparameters are provided in the `ArgumentParser` object of the respective training functions. Feel free to play around with those to familiarize yourself with the effect of different hyperparameters. Nevertheless, your model should be able to generate decent images with the default hyperparameters.
   If you test the code on your local machine, you can use the argument `--progress_bar` to show a training progressbar. Remember to not use this on Lisa as it otherwise fills up your SLURM output file very quickly. It is recommended to look at the TensorBoard there instead.
   The training time with the default hyperparameters is less than 20 minutes on a NVIDIA GTX1080Ti (GPU provided on Lisa).
