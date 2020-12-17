@@ -81,26 +81,37 @@ So we see that the lower bound increases as our $q(Z|\bm{x}_n)$ better
   too much from what we expect the distribution to be like, the loss increases
   due to this term, which thus regularizes the learnable parameters $\phi$.
 
+#+BEGIN_EXPORT latex
+\newpage
+#+END_EXPORT
+
+
 ** Q1.7
 
 #+BEGIN_EXPORT latex
-\newcommand{\qqq}{q_\phi(Z|\bm{x}_n)}
-\newcommand{\sq}{\text{diag}(\Sigma_\phi (\bm{x}_n))}
 \begin{align*}
-\mathcal{L}_n^{\text{recon}} &= -\mathbb{E}_{\qqq} \[ \log p_\theta(\bm{x}_n | Z) \]\\
-&\approx - \frac{1}{L} \sum^L_{l=1} p_\theta(\bm{x}_n | Z^{(l)}) \quad Z^{(l)} \sim \qqq\\
-&= - \frac{1}{L} \sum^L_{l=1} p_\theta(\bm{x}_n | Z^{(l)}) \quad Z^{(l)} \sim \qqq\\
-\mathcal{L}_n^{\text{reg}} &= D_{\text{KL}}(\q || p_\theta(Z))\\
-&= D_{\text{KL}}(\mathcal{N}(\mu_\phi(\bm{x}_n), \text{diag}(\Sigma_\phi (\bm{x}_n))) || \mathcal{N}(0, \bm{I}_D))\\
-&= \sum_{i} D_{\text{KL}}(\mathcal{N}(\mu_\phi(\bm{x}_n)_i, \Sigma_\phi (\bm{x}_n)_i) || \mathcal{N}(0, 1))\\
-&= \sum_{i} \frac{1}{2} \left( \Sigma_\phi (\bm{x}_n)_i + \mu_\phi(\bm{x}_n)_i^2 - 1 - \log \Sigma_\phi (\bm{x}_n)_i} \right)
+\mathcal{L}_n^{\text{recon}} &= -\mathbb{E}_{q_\phi(Z|\bm{x}_n)} \left[ \log p_\theta(\boldsymbol{x}_n | Z) \right]\\
+&\approx - \frac{1}{L} \sum^L_{l=1} p_\theta(\boldsymbol{x}_n | Z^{(l)}) \quad{} Z^{(l)} \sim q_\phi(Z|\boldsymbol{x}_n)\\
+&= - \frac{1}{L} \sum^L_{l=1} p_\theta(\boldsymbol{x}_n | Z^{(l)}) \quad{} Z^{(l)} \sim q_\phi(Z|\boldsymbol{x}_n)\\
+\end{align*}
+
+Then,
+
+
+\begin{align*}
+
+\mathcal{}\mathcal{L}_n^{reg} &= D_{KL} (q_\phi(Z|\boldsymbol{x}_n) || p_\theta(Z))\\
+&= D_{\text{KL}}(\mathcal{N}(\mu_\phi(\boldsymbol{x}_n), \text{diag}(\Sigma_\phi (\boldsymbol{x}_n))) || \mathcal{N}(0, \boldsymbol{I}_D))\\
+&= \sum_{i} D_{\text{KL}}(\mathcal{N}(\mu_\phi(\boldsymbol{x}_n)_i, \Sigma_\phi (\boldsymbol{x}_n)_i) || \mathcal{N}(0, 1))\\
+&= \sum_{i} \frac{1}{2} \left( \Sigma_\phi (\boldsymbol{x}_n)_i + \mu_\phi(\boldsymbol{x}_n)_i^2 - 1 - \log \Sigma_\phi (\boldsymbol{x}_n)_i} \right)
 \end{align*}
 
 And so,
 
 \begin{align*}
+
 \mathcal{L} &= \sum_{n=1}^N \mathcal{L}_n^{\text{recon}} + \mathcal{L}_n^{\text{reg}}\\
-&\approx \sum_{n=1}^N \left( \sum_{i} \frac{1}{2} \left( \Sigma_\phi (\bm{x}_n)_i + \mu_\phi(\bm{x}_n)_i^2 - 1 - \log \Sigma_\phi (\bm{x}_n)_i} \right) - \frac{1}{L} \sum^L_{l=1} p_\theta(\bm{x}_n | Z^{(l)}) \right) \quad Z^{(l)} \sim \qqq
+&\approx \sum_{n=1}^N \left( \sum_{i} \frac{1}{2} \left( \Sigma_\phi (\boldsymbol{x}_n)_i + \mu_\phi(\boldsymbol{x}_n)_i^2 - 1 - \log \Sigma_\phi (\boldsymbol{x}_n)_i} \right) - \frac{1}{L} \sum^L_{l=1} p_\theta(\boldsymbol{x}_n | Z^{(l)}) \right) \quad Z^{(l)} \sim q_\phi(Z|\boldsymbol{x}_n)
 \end{align*}
 #+END_EXPORT
 
@@ -109,14 +120,15 @@ And so,
 The operation of sampling is non-differentiable, because it does not (unlike a
 function) exist in some spatial domain. Hence, it has no surface, and a
 gradient or slope cannot be taken. Sampling is as much differentiable as the
-action of eating an apple pie is, say. Because, however, sampling is used in
-the function $\mathcal{L}$, the derivative gets 'stuck' at the operation of
-sampling and cannot be backpropagated beyond sampling, while we still have
-parameters there (in the function that is being sampled from). The
-reparametrization trick separates the function that is being sampled from,
-$\qqq$, from the sampling itself. This makes the backpropagation towards the
-parameters in that function 'before' the sampling independent of the sampling
-operation, which makes the gradients of those parameters computable.
+action of eating an apple pie is differentiable, say. Because, however,
+sampling is used in the function $\mathcal{L}$, the derivative gets 'stuck' at
+the operation of sampling and cannot be backpropagated beyond sampling, while
+we still have parameters there (in the function that is being sampled
+from). The reparametrization trick separates the function that is being sampled
+from, $q_\phi(Z|\boldsymbol{x}_n)$, from the sampling itself. This makes the
+backpropagation towards the parameters in that function 'before' the sampling
+independent of the sampling operation, which makes the gradients of those
+parameters computable.
 
 ** Q1.9
 
@@ -160,7 +172,7 @@ representative of real-world data (e.g., areas that transition from one
 realistic digit to another).
 
 #+ATTR_LATEX: :width 0.6\linewidth :float nil
-#+CAPTION: Samples of the MLP VAE after training for 0 epochs.
+#+CAPTION: Samples of the MLP VAE before training.
 #+label: fig:vae_samples_at_0
 [[file:]][[~/code/uva/msc/dlc/uvadlc_practicals_2020/assignment_3/3_generative/part1/VAE_logs/lightning_logs/version_26/0_samples.png]]
 
@@ -234,8 +246,210 @@ to prevent vanishing gradients.
 
 ** Q2.3
 
+The generator $G$ is comprised of a fully-connected feed-forward NN, with an
+input latent dimension of =32=, three hidden =Linear= layers of =128=, =256=, and
+=512= nodes, and an output =Linear= layer of $784 = 1 \times 28 \times 28$,
+which is the (flattened) image dimensionality. Each =Linear= layer is succeeded
+by Dropout with a probability of =0.1=, and a Leaky ReLU with alpha of =0.2=,
+except for the output layer.
+
+The discriminator $D$ is also comprised of a fully-connected feed-forward NN,
+which takes an image as an input, and therefore has an input =Linear= layer of
+=784= nodes, which are followed by two hidden =Linear= layers of =512= and
+=256= nodes, which are in turn followed by an output =Linear= layer of a single
+node, which represents the prediction $\hat{y}$ for a sample $x$. Each
+=Linear= layer is succeeded by Dropout with a probability of =0.3=, and a Leaky
+ReLU with an alpha of =0.2=.
+
+Training was performed using two =Adam= optimizers on both $G$ and $D$, both with
+$\beta_1$ of =0.5=, $\beta_2$ of =0.999=, and a learning rate of
+=2e-4=. Training happened in an alternating pattern, with $G$ and $D$ being
+optimized separately, in alternating steps. A batch size of =128= was used, and
+training lasted for =250= epochs.
+
+Samples of the images generated by $G$ before training, after training for 20
+epochs, and after training for 250 epochs are displayed in Figures
+[[fig:gan_at_0]], [[fig:gan_at_20]], and [[fig:gan_at_250]], respectively. We see that
+before training, $G$ generates some very faint noise, which might also appear
+faint due to the normalization of the image. At 20 epochs, $G$ already
+generates some fuzzy, far-from-perfect digits, with some samples being to faint
+to be legible. At 250 epochs, the quality of the samples has improved a lot,
+with way less pixels outside of the digits, and barely any too-faint
+digits. When comparing Figure [[fig:gan_at_250]] to samples of the VAE in Figure
+[[fig:vae_samples_at_80]], we see the difference in their architecture: the VAE
+provides more robust samples that are, however, overly smooth and rather similar to
+each other, while $G$ provides samples that are more diverse (and perhaps
+realistic).
+
+#+ATTR_LATEX: :width 0.6\linewidth :float nil
+#+CAPTION: Samples generated by the generator $G$ before training.
+#+label: fig:gan_at_0
+[[file:/Users/jeroen/code/uva/msc/dlc/uvadlc_practicals_2020/assignment_3/3_generative/part2/GAN_logs/lightning_logs/version_7096655/0_samples.png]]
+
+#+ATTR_LATEX: :width 0.6\linewidth :float nil
+#+CAPTION: Samples generated by the generator $G$ after training 20 epochs.
+#+label: fig:gan_at_20
+[[file:/Users/jeroen/code/uva/msc/dlc/uvadlc_practicals_2020/assignment_3/3_generative/part2/GAN_logs/lightning_logs/version_7096655/20_samples.png]]
+
+#+ATTR_LATEX: :width 0.6\linewidth :float nil
+#+CAPTION: Samples generated by the generator $G$ after training 250 epochs.
+#+label: fig:gan_at_250
+[[file:/Users/jeroen/code/uva/msc/dlc/uvadlc_practicals_2020/assignment_3/3_generative/part2/GAN_logs/lightning_logs/version_7096655/250_samples.png]]
 
 ** Q2.4
 
+Four interpolations have been displayed on each row in Figure
+[[fig:gan_interpolated_samples]]. Looking at these digits, we indeed see an
+interpolation between the two digits at either end (which correspond to the
+farthest points in latent space). In the top row, we see that a =9= is being
+interpolated to a =7=-like digit. In the second row, an incomplete =8= is
+interpolated, apparently traversing the area which encodes =9='s, to a =4=.
+
+#+ATTR_LATEX: :width 0.8\linewidth :float nil
+#+CAPTION: Four interpolations between two points in the latent space, sampled by the generator $G$. Each row shows one interpolation, with samples generated from an interpolation between two points in the latent space.
+#+label: fig:gan_interpolated_samples
+[[file:part2/plots/interpolation.png]]
 
 ** Q2.5
+
+I did not encounter any of these problems myself; the first (bug-free) run of
+my GAN actually yielded the results displayed above. I'll talk about mode
+collapse.
+
+A distribution $p(\boldsymbol{x})$ over some data, will typically have some areas with high
+probability, where samples are concentrated, amidst vast areas of low
+probability. These high-probability areas could be shaped as islands, which we
+call modes. If the samples are images of animals, a mode might correspond to a
+single type of animal (e.g. a horse, or "brown horse"). Here, the areas in
+between modes would correspond to unrealistic images that depict, say, a weird
+half-horse-half-whale animal, no animal at all, or even just some noise.
+
+Mode collapse occurs when the distribution learned by the generator $G$ only
+covers a subset of all modes present in the distribution over the data. If the
+data contains a lot of animals, but $G$ can only generate five different
+animals, it has probably suffered from mode collapse. This happens because the
+generator will prefer generating images which it knows are realistic over
+trying out new images (which are less realistic, but might /lead/ to new
+modes, if only exploration in that direction would continue).
+
+In the case of GANs, mode collapse might be avoided by punishing the generator
+if the samples it generates are too similar. Essentially, we say, "hey,
+you've generated too many horses now, go and try something else!". We add, to
+the loss function, some additional term which represents the similarity between
+generated samples within one batch. A (very) naive version of this term might look
+like:
+
+$$\text{sim}(\boldsymbol{x}^{(1)}, \boldsymbol{x}^{(2)}, \dots, \boldsymbol{x}^{(B)}) = -\sum_i^H \sum_j^W
+\text{var}(x_{ij}^{(1)}, x_{ij}^{(2)}, \dots, x_{ij}^{(B)})$$
+
+which computes the negative sum of per-pixel variance between the $B$
+images. If the images are similar/identical, their per-pixel variance will be
+low, and so this value will be higher.
+
+Alternatively, the Wasserstein loss seems to alleviate mode collapse as well.
+
+* Normalizing flows
+
+** Q3.1
+
+#+BEGIN_EXPORT latex
+First, let's note down the derivative: $\frac{\partial f(x)}{\partial x} = \frac{\partial}{\partial x} x^3 = 3x^2$
+
+We have:
+
+\begin{align*}
+p_x(x) &= p_z(z) \left| \frac{\partial f(x)}{\partial x} \right|\\
+&= \mathcal{U}(a, b) \left| \frac{\partial f(x)}{\partial x} \right|\\
+&= \begin{cases} \frac{1}{b - a} \left| \frac{\partial f(x)}{\partial x} \right| &\text{if }a \leq z \leq b\\ 0 &\text{otherwise} \end{cases}\\
+&= \begin{cases} \frac{1}{b - a} \left| 3x^2 \right| &\text{if }a \leq x^3 \leq b\\ 0 &\text{otherwise} \end{cases}\\
+&= \begin{cases} \frac{1}{b - a} \left| 3x^2 \right| &\text{if }a^{1/3} \leq x \leq b^{1/3}\\ 0 &\text{otherwise} \end{cases}
+\end{align*}
+
+We can verify this by making sure the integral sums to 1:
+
+\begin{align*}
+\int_{-\inf}^{\inf} p_x(x) dx &= \int_{-\inf}^{\inf} \begin{cases} \frac{1}{b - a} \left| 3x^2 \right| &\text{if }a^{1/3} \leq x \leq b^{1/3}\\ 0 &\text{otherwise} \end{cases} dx\\
+&= \int_{a^{1/3}}^{b^{1/3}} \frac{1}{b - a} \left| 3x^2 \right| dx\\
+&= \left[ \frac{1}{b - a} x^3 \right]^{b^{1/3}}_{a^{1/3}} \\
+&= \frac{1}{b - a} (b^{1/3})^3 - \frac{1}{b - a} (a^{1/3})^3\\
+&= \frac{1}{b - a} (b - a) = 1
+\end{align*}
+#+END_EXPORT
+
+** Q3.2
+
+*a)* Only the determinants of square matrices are defined. This means
+ that $\frac{\partial \boldsymbol{h}_l}{\partial \boldsymbol{h}_{(l-1)}}$ needs to be square,
+ which means that the number of dimensions in $\boldsymbol{h}_l$ must be equal to the
+ number of dimensions in $\boldsymbol{h}_{(l-1)}$.
+
+*b)* Because the number of dimensions has to stay equal between
+ transformations, the problem becomes one of computational cost/complexity. I
+ believe that computing the determinant of a matrix is costly, upper-bounded by
+ $O(n!)$. Although there are some quicker ways such as Gaussian Elimination, I
+ am unsure whether those apply to these Jacobian matrices. In any case, for
+ many layers of transformations, which are often required for good performance,
+ it becomes very costly to apply a NN with Normalizing Flows on, say, images,
+ which have a relatively high dimensionality of $D = C \times W \times H$. The
+ resulting cost is partly due to the fact that we cannot reduce dimensions as
+ we get deeper into the latent/transformed layers; and it is a cost that is
+ present when sampling from the model.
+
+** Q3.3
+
+*a)* The problem here becomes that, because the model fits a continuous
+distribution onto a target distribution which only contains integer values, the
+fitted distribution will consist of huge spikes (delta-peaks) around/on those
+values, and very low probability in the areas between integers. One solution is
+called *dequantization*, and it involves adding slight amounts of noise to the
+input integer values, such that they are not precisely integers anymore, which
+will cause the fitted distribution to have a nice and smooth and non-infinite
+peak around the integer values.
+
+*b)* Let us assume we have a flow-based model $F(x, \theta_L, \dots, \theta_1)
+ = f_L \circ \dots \circ f_1 (x)$, where $f_l$ is a smooth and invertible
+ function, parameterized by $\theta_l$ (for all $l \in L$), which maps between
+ random variables $x \sim p_x(x)$ and $z \sim p_z(z)$ (where $z = F(x)$). Its
+ inverted counterpart $F^{-1}(z, \theta_L, \dots, \theta_1) = f_1^{-1} \circ
+ \dots \circ f_L^{-1} (z)$ maps from $z$ back to $x$. We also have a dataset $X
+ = { x_1, \dots, x_N }$, consisting of $N$ datapoints.
+
+We do not know $p_x(x)$, while we do know $p_z(z)$. We want to learn $p_x(x)$
+from our data $X$, and represent it using our model $F(x)$, which we can
+achieve by optimizing the log-likelihood of our data:
+
+$$\log p_x(X) = \sum_{n=1}^N \log p_x(x_n) = \sum_{n=1}^N \left[ \log p_z(z) +
+\sum_{l=1}^L \log \left| \text{det} \frac{\partial f_l}{\partial f_{(l-1)}}
+\right| \right]$$
+
+During training, we take a batch of images, put them all through the
+function/NN $F(x)$ to attain $p_z(z)$, calculate the logs of the determinants
+of the Jacobians, and then use the negative log-likelihood above as the loss
+function to compute our gradients.
+
+We can, like we have done previously, use bits per dimension (bpd) as an
+evaluation metric that indicates how well the model's distribution over $x$ has
+fitted to the data; the higher the bpd, the better the fit. Here, we calculate
+the negative log-likelihoods (similar to training step) and then the bpd.
+
+To sample from the model, we sample from our prior $z \sim p_z(z)$ (which is a
+distribution we have specified ourselves, like a unit Gaussian). Then, we get
+our corresponding sample $x = F^{-1}(z)$.
+
+* Conclusion
+
+** Q4.1
+
+In this report, we have looked at various generative architectures: Variational
+Auto-Encoders (VAEs), Generative Adversarial Networks (GANs), and Normalizing
+Flows (NFs). Each of these architectures function on a different principle, but
+use the idea of latent space in some form or another. A latent space is some
+D-dimensional space in which points corresponds, in some form, to samples that
+we are interested in generating, or assigning a likelihood to.
+
+VAEs apply Variational Inference to put constraints on the latent space, define
+use two neural networks to map between the data space and latent space, and
+leave it to those NNs to figure out whatever latent distribution is the best at
+mimicking the data distribution while respecting the constraints.
+
+GANs don't define a /distribution/ in the latent space, but simply use a
